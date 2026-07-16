@@ -179,14 +179,27 @@
     <div id="listaPendientes"></div>
   </section>
 
-  <!-- ALERTAS -->
+  <!-- LECTURAS (dashboard) -->
   <section class="seccion" id="sec-alertas">
-    <h2>Alertas (&lt; 2 h de luz)</h2>
     <div class="tarjeta">
       <div class="fila">
         <div><label for="alDesde">Desde</label><input type="date" id="alDesde" onchange="cargarAlertas()"></div>
         <div><label for="alHasta">Hasta</label><input type="date" id="alHasta" onchange="cargarAlertas()"></div>
       </div>
+      <div class="fila" style="margin-top:4px">
+        <div><label for="alBloque">Bloque</label><select id="alBloque" onchange="cargarAlertas()"></select></div>
+        <div><label for="alFiltro">Mostrar</label>
+          <select id="alFiltro" onchange="cargarAlertas()">
+            <option value="todas">Todas las lecturas</option>
+            <option value="alertas">Solo alertas (&lt; 2 h)</option>
+          </select>
+        </div>
+      </div>
+    </div>
+    <div class="resumenDia">
+      <div class="kpi"><div class="num" id="kpiLect">0</div><div class="lbl">Lecturas</div></div>
+      <div class="kpi"><div class="num" style="color:var(--rojo)" id="kpiAlert">0</div><div class="lbl">Alertas</div></div>
+      <div class="kpi"><div class="num" style="color:var(--verde)" id="kpiOk">—</div><div class="lbl">% noches OK</div></div>
     </div>
     <div id="listaAlertas"></div>
   </section>
@@ -212,6 +225,16 @@
 
   <!-- BLOQUES -->
   <section class="seccion" id="sec-bloques">
+    <div class="tarjeta" id="formNuevoBloque" style="display:none">
+      <h2 style="margin-top:0">Agregar bloque</h2>
+      <div class="fila">
+        <div><label for="nbCodigo">Código</label><input id="nbCodigo" placeholder="ej. 51 o 15-3"></div>
+        <div><label for="nbNaves">Naves</label><input type="number" id="nbNaves" min="1" placeholder="12"></div>
+        <div><label for="nbMedias">Medias</label><input type="number" id="nbMedias" min="0" step="0.5" value="0"></div>
+      </div>
+      <button class="btn" onclick="crearBloque()">Guardar bloque</button>
+      <div style="font-size:12px;color:var(--texto2);margin-top:8px">Se creará automáticamente su horómetro H1 cubriendo de la nave 1 a la última.</div>
+    </div>
     <h2>Bloques del cultivo</h2>
     <div class="tarjeta" style="padding:6px 12px">
       <table>
@@ -224,7 +247,7 @@
   <nav>
     <button class="activo" onclick="irA('registro',this)"><span class="ico">✎</span>Registro</button>
     <button onclick="irA('pendientes',this)"><span class="ico">🚶</span>Pendientes<span class="badgeNum" id="numPend"></span></button>
-    <button onclick="irA('alertas',this)"><span class="ico">⚠</span>Alertas<span class="badgeNum" id="numAlertas"></span></button>
+    <button onclick="irA('alertas',this)"><span class="ico">📊</span>Lecturas<span class="badgeNum" id="numAlertas"></span></button>
     <button onclick="irA('horometros',this)"><span class="ico">⏱</span>Horóm.</button>
     <button onclick="irA('bloques',this)"><span class="ico">▦</span>Bloques</button>
   </nav>
@@ -371,6 +394,7 @@ async function arrancarApp(){
   $('usuarioNombre').textContent = perfil.nombre;
   $('usuarioRol').textContent = perfil.rol + (hayRed() ? '' : ' · offline');
   if(esSupervisorOAdmin()) $('formNuevoHoro').style.display = 'block';
+  if(perfil.rol === 'administrador') $('formNuevoBloque').style.display = 'block';
 
   $('regFecha').value = hoyISO();
   const d7 = new Date(); d7.setDate(d7.getDate()-7);
@@ -469,6 +493,7 @@ async function cargarBloques(){
   const ops = bloques.map(b => `<option value="${b.id}">Bloque ${b.codigo}</option>`).join('');
   $('regBloque').innerHTML = ops;
   $('nhBloque').innerHTML = ops;
+  $('alBloque').innerHTML = '<option value="">Todos los bloques</option>' + ops;
   pintarLimiteNaves();
   pintarTablaBloques();
 }
@@ -483,6 +508,32 @@ function pintarTablaBloques(){
       <td class="mono">${Number(b.medias_naves) || '—'}</td>
       <td>${b.lat ? '📍' : (puedeGPS ? `<button class="miniBtn" onclick="capturarGPS(${b.id})">Capturar</button>` : '—')}</td>
     </tr>`).join('');
+}
+
+async function crearBloque(){
+  if(!hayRed()){ aviso('Se requiere conexión para crear bloques.', true); return; }
+  const codigo = $('nbCodigo').value.trim();
+  const naves = parseInt($('nbNaves').value);
+  const medias = parseFloat($('nbMedias').value) || 0;
+  if(!codigo){ aviso('Escriba el código del bloque.', true); return; }
+  if(bloques.some(b => b.codigo === codigo)){ aviso(`Ya existe un bloque con código ${codigo}.`, true); return; }
+  if(isNaN(naves) || naves < 1){ aviso('Ingrese el número de naves (mínimo 1).', true); return; }
+  if(medias < 0){ aviso('Las medias naves no pueden ser negativas.', true); return; }
+
+  const { data: nuevo, error } = await db.from('bloques')
+    .insert({ codigo, naves, medias_naves: medias }).select().single();
+  if(error){ aviso('Error: ' + error.message, true); return; }
+
+  // Horómetro H1 por defecto (nave 1 a la última)
+  const { error: eH } = await db.from('horometros')
+    .insert({ bloque_id: nuevo.id, nombre: 'H1', nave_desde: 1, nave_hasta: naves, created_by: perfil.id });
+  if(eH){ aviso('Bloque creado, pero falló el horómetro H1: ' + eH.message, true); }
+  else aviso(`Bloque ${codigo} creado con su horómetro H1 (naves 1–${naves}) ✔`);
+
+  $('nbCodigo').value = ''; $('nbNaves').value = ''; $('nbMedias').value = '0';
+  await cargarBloques();
+  await cargarListaHorometros();
+  await cargarEstadoDia();
 }
 
 async function capturarGPS(bloqueId){
@@ -797,32 +848,58 @@ function revisarNotificacionPendientes(){
   aviso('⚠ ' + cuerpo, true);
 }
 
-/* ------------------------- alertas ------------------------- */
+/* ------------------------- dashboard de lecturas ------------------------- */
 async function cargarAlertas(){
-  if(!hayRed()) return;
+  if(!hayRed()){
+    $('listaAlertas').innerHTML = '<div class="vacio">El historial de lecturas requiere conexión.</div>';
+    return;
+  }
   const desde = $('alDesde').value, hasta = $('alHasta').value;
+  const bloqueId = $('alBloque').value;          // '' = todos
+  const soloAlertas = $('alFiltro').value === 'alertas';
+
   let q = db.from('lecturas')
-    .select('*, horometros(nombre, nave_desde, nave_hasta, bloques(codigo)), perfiles:usuario_id(nombre)')
-    .eq('alerta', true).order('fecha', { ascending:false }).limit(200);
+    .select('*, horometros!inner(nombre, nave_desde, nave_hasta, bloque_id, bloques(codigo)), perfiles:usuario_id(nombre)')
+    .order('fecha', { ascending:false }).order('horometro_id').limit(500);
   if(desde) q = q.gte('fecha', desde);
   if(hasta) q = q.lte('fecha', hasta);
+  if(soloAlertas) q = q.eq('alerta', true);
+  if(bloqueId) q = q.eq('horometros.bloque_id', Number(bloqueId));
+
   const { data, error } = await q;
   if(error){ aviso(error.message, true); return; }
-  const n = (data||[]).length;
+
+  const total = (data||[]).length;
+  const nAlertas = (data||[]).filter(l => l.alerta).length;
+  const conDelta = (data||[]).filter(l => l.delta != null).length;
+  $('kpiLect').textContent = total;
+  $('kpiAlert').textContent = nAlertas;
+  $('kpiOk').textContent = conDelta ? Math.round(100*(conDelta-((data||[]).filter(l=>l.alerta&&l.delta!=null).length))/conDelta) + '%' : '—';
+
   const badge = $('numAlertas');
-  badge.style.display = n ? 'flex' : 'none';
-  badge.textContent = n;
-  $('listaAlertas').innerHTML = n ? data.map(a => `
-    <div class="alertaItem">
+  badge.style.display = nAlertas ? 'flex' : 'none';
+  badge.textContent = nAlertas;
+
+  if(!total){
+    $('listaAlertas').innerHTML = '<div class="vacio">Sin lecturas con los filtros seleccionados.</div>';
+    return;
+  }
+
+  $('listaAlertas').innerHTML = data.map(a => {
+    const esAlerta = a.alerta;
+    const borde = esAlerta ? 'var(--rojo)' : 'var(--verde)';
+    const deltaTxt = a.delta != null ? Number(a.delta).toFixed(1) + ' h' : 'primera lectura';
+    return `
+    <div class="alertaItem" style="border-left-color:${borde}">
       <div class="alertaCab">
         <span>Bloque <b>${a.horometros?.bloques?.codigo ?? '?'}</b> · ${a.horometros?.nombre ?? ''} (naves ${a.horometros?.nave_desde}–${a.horometros?.nave_hasta})</span>
         <span class="mono">${a.fecha}</span>
       </div>
-      <div class="alertaDelta mono">${Number(a.delta).toFixed(1)} h</div>
+      <div class="alertaDelta mono" style="color:${esAlerta ? 'var(--rojo)' : 'var(--verde)'}">${deltaTxt}${esAlerta ? ' ⚠' : ''}</div>
       <div style="font-size:12px;color:var(--texto2)">Lectura: <span class="mono">${Number(a.valor).toFixed(1)} h</span> · Registró: ${a.perfiles?.nombre ?? '—'}</div>
-      <div class="alertaObs">📝 ${a.observacion ?? 'Sin observación'}</div>
-    </div>`).join('')
-    : '<div class="vacio">Sin alertas en el rango seleccionado. 🌼</div>';
+      ${a.observacion ? `<div class="alertaObs">📝 ${a.observacion}</div>` : ''}
+    </div>`;
+  }).join('');
 }
 
 /* ------------------------- gestión de horómetros ------------------------- */
