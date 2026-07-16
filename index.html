@@ -504,13 +504,26 @@ async function cargarBloques(){
   if(!bloques.length){ aviso('Sin datos de bloques. Conéctese una vez para descargar.', true); return; }
 
   const ops = bloques.map(b => `<option value="${b.id}">Bloque ${b.codigo}</option>`).join('');
-  $('regBloque').innerHTML = ops;
   $('nhBloque').innerHTML = ops;
   $('alBloque').innerHTML = '<option value="">Todos los bloques</option>' + ops;
+  refrescarSelectorRegistro();
   pintarLimiteNaves();
   pintarTablaBloques();
 }
 function bloquePorId(id){ return bloques.find(b => b.id === Number(id)); }
+
+function refrescarSelectorRegistro(){
+  // En Registro solo aparecen los bloques con al menos un horómetro activo
+  const horos = lsGet('cacheHorometros', []);
+  const conLuces = new Set(horos.map(h => h.bloque_id));
+  // Respaldo: si aún no hay caché (primer arranque), mostrar todos
+  const visibles = horos.length ? bloques.filter(b => conLuces.has(b.id)) : bloques;
+  const sel = $('regBloque');
+  const previo = sel.value;
+  sel.innerHTML = visibles.map(b => `<option value="${b.id}">Bloque ${b.codigo}</option>`).join('')
+    || '<option value="">Sin bloques en luces</option>';
+  if(previo && visibles.some(b => b.id === Number(previo))) sel.value = previo;
+}
 
 function pintarTablaBloques(){
   const puedeEditar = esSupervisorOAdmin();
@@ -975,6 +988,11 @@ async function crearHorometro(){
   if(!nombre){ aviso('Escriba un nombre para el horómetro.', true); return; }
   if(isNaN(desde) || isNaN(hasta) || desde < 1 || hasta < desde){ aviso('Rango de naves inválido.', true); return; }
   if(hasta > b.naves){ aviso(`El bloque ${b.codigo} solo tiene ${b.naves} naves.`, true); return; }
+  const choque = rangoSolapa(bloqueId, desde, hasta, -1);
+  if(choque){
+    aviso(`El rango ${desde}–${hasta} se solapa con ${choque.nombre} (naves ${choque.nave_desde}–${choque.nave_hasta}) del mismo bloque. Edite primero ese rango con el botón ✎.`, true);
+    return;
+  }
   const { error } = await db.from('horometros').insert({
     bloque_id: bloqueId, nombre, nave_desde: desde, nave_hasta: hasta, created_by: perfil.id
   });
@@ -991,6 +1009,7 @@ async function cargarListaHorometros(){
   if(error){ aviso(error.message, true); return; }
   // La caché de trabajo (registro, pendientes) solo lleva los activos
   lsSet('cacheHorometros', data.filter(h => h.activo).map(({bloques:_, ...h}) => h));
+  refrescarSelectorRegistro();
   pintarGrupoHoros(data.map(h => ({...h, _codigo: h.bloques?.codigo, _naves: h.bloques?.naves})));
 }
 function pintarListaHorometrosDesdeCache(){
@@ -1002,7 +1021,8 @@ function pintarListaHorometrosDesdeCache(){
 }
 function pintarGrupoHoros(data){
   if(!data.length){ $('listaHorometros').innerHTML = '<div class="vacio">Sin horómetros.</div>'; return; }
-  const gestiona = esSupervisorOAdmin() && hayRed();
+  const online = hayRed();
+  const editaRangos = esSupervisorOAdmin() && online;
   const porBloque = {};
   data.forEach(h => { (porBloque[h._codigo] = porBloque[h._codigo] || []).push(h); });
   $('listaHorometros').innerHTML = Object.entries(porBloque).map(([cod, hs]) => `
@@ -1015,10 +1035,44 @@ function pintarGrupoHoros(data){
         <span>${h.nombre}${h.activo ? '' : ' <span style="color:var(--ambar);font-size:11px">⏸ pausado</span>'}</span>
         <span style="display:flex;align-items:center;gap:8px">
           <span class="mono" style="color:var(--texto2)">naves ${h.nave_desde}–${h.nave_hasta}</span>
-          ${gestiona ? `<button class="miniBtn" onclick="toggleHorometro(${h.id}, ${h.activo}, '${h.nombre}', '${cod}')">${h.activo ? '⏸ Parar' : '▶ Reactivar'}</button>` : ''}
+          ${editaRangos ? `<button class="miniBtn" onclick="editarRangoHorometro(${h.id})">✎</button>` : ''}
+          ${online ? `<button class="miniBtn" onclick="toggleHorometro(${h.id}, ${h.activo}, '${h.nombre}', '${cod}')">${h.activo ? '⏸' : '▶'}</button>` : ''}
         </span>
       </div>`).join('')}
     </div>`).join('');
+}
+
+function rangoSolapa(bloqueId, desde, hasta, excluirId){
+  const otros = lsGet('cacheHorometros', [])
+    .filter(h => h.bloque_id === bloqueId && h.id !== excluirId);
+  return otros.find(h => h.nave_desde <= hasta && desde <= h.nave_hasta) || null;
+}
+
+async function editarRangoHorometro(id){
+  if(!hayRed()){ aviso('Se requiere conexión para editar rangos.', true); return; }
+  const h = lsGet('cacheHorometros', []).find(x => x.id === id);
+  if(!h){ aviso('Horómetro no encontrado en caché. Recargue la app.', true); return; }
+  const b = bloquePorId(h.bloque_id);
+
+  const dTxt = prompt(`Horómetro ${h.nombre} (bloque ${b.codigo}, ${b.naves} naves)\nNave DESDE (actual: ${h.nave_desde}):`, h.nave_desde);
+  if(dTxt === null) return;
+  const hTxt = prompt(`Nave HASTA (actual: ${h.nave_hasta}, máximo ${b.naves}):`, h.nave_hasta);
+  if(hTxt === null) return;
+  const desde = parseInt(dTxt), hasta = parseInt(hTxt);
+
+  if(isNaN(desde) || isNaN(hasta) || desde < 1 || hasta < desde){ aviso('Rango inválido.', true); return; }
+  if(hasta > b.naves){ aviso(`El bloque ${b.codigo} solo tiene ${b.naves} naves.`, true); return; }
+  const choque = rangoSolapa(h.bloque_id, desde, hasta, id);
+  if(choque){
+    aviso(`El rango ${desde}–${hasta} se solapa con ${choque.nombre} (naves ${choque.nave_desde}–${choque.nave_hasta}). Ajuste primero ese horómetro.`, true);
+    return;
+  }
+
+  const { error } = await db.from('horometros').update({ nave_desde: desde, nave_hasta: hasta }).eq('id', id);
+  if(error){ aviso('Error: ' + error.message, true); return; }
+  aviso(`${h.nombre} (bloque ${b.codigo}) ahora cubre naves ${desde}–${hasta} ✔`);
+  await cargarListaHorometros();
+  await cargarHorometrosBloque();
 }
 
 async function toggleHorometro(id, activo, nombre, codBloque){
@@ -1027,7 +1081,7 @@ async function toggleHorometro(id, activo, nombre, codBloque){
     ? `¿Parar el horómetro ${nombre} del bloque ${codBloque}?\n\nÚsese cuando el bloque sale de luces (fin de fotoperiodo). No se exigirá registro diario ni aparecerá en pendientes. Las lecturas históricas se conservan.`
     : `¿Reactivar el horómetro ${nombre} del bloque ${codBloque}?\n\nEl bloque vuelve al registro diario. Nota: la primera lectura tras la pausa puede marcar alerta por el delta acumulado — registre la observación "reingreso a luces".`;
   if(!confirm(msg)) return;
-  const { error } = await db.from('horometros').update({ activo: !activo }).eq('id', id);
+  const { error } = await db.rpc('alternar_horometro', { h_id: id });
   if(error){ aviso('Error: ' + error.message, true); return; }
   aviso(activo ? `⏸ Horómetro ${nombre} (bloque ${codBloque}) parado.` : `▶ Horómetro ${nombre} (bloque ${codBloque}) reactivado.`);
   await cargarListaHorometros();

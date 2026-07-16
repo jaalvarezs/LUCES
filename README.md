@@ -23,6 +23,7 @@ En el SQL Editor de tu proyecto Supabase ejecuta **en orden**:
 2. `actualizacion_v2.sql` (GPS por bloque, justificaciones, recorridos)
 3. `actualizacion_v3.sql` (supervisores pueden crear y editar bloques)
 4. `actualizacion_v4.sql` (supervisores ven la lista de usuarios para el mapa de recorridos)
+5. `actualizacion_v5.sql` (rangos de naves sin solapamiento; operarios pueden pausar/reactivar horómetros)
 
 Luego crea los usuarios en **Authentication → Users** con correos sintéticos internos
 (`nombreusuario@trigal.local` + **Auto Confirm User** ✅). En la app, cada persona inicia
@@ -79,6 +80,7 @@ La app queda en `https://TU_USUARIO.github.io/horometros-fotoperiodo/`.
 | `actualizacion_v2.sql` | Actualización: GPS, justificaciones, recorridos |
 | `actualizacion_v3.sql` | Actualización: permisos de bloques para supervisores |
 | `actualizacion_v4.sql` | Actualización: supervisores ven usuarios (mapa de recorridos) |
+| `actualizacion_v5.sql` | Actualización: anti-solapamiento de naves + pausa por operarios |
 
 ## Parámetros ajustables (en `index.html`, sección CONFIG)
 
