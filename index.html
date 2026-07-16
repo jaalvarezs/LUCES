@@ -201,6 +201,16 @@
       <div class="kpi"><div class="num" style="color:var(--rojo)" id="kpiAlert">0</div><div class="lbl">Alertas</div></div>
       <div class="kpi"><div class="num" style="color:var(--verde)" id="kpiOk">—</div><div class="lbl">% noches OK</div></div>
     </div>
+    <div class="tarjeta">
+      <h2 style="margin-top:0">🚶 Recorrido del operario</h2>
+      <div class="fila">
+        <div><label for="recFecha">Fecha</label><input type="date" id="recFecha"></div>
+        <div><label for="recUsuario">Operario</label><select id="recUsuario"></select></div>
+      </div>
+      <button class="btn" onclick="cargarRecorrido()" style="margin-top:12px">Ver recorrido</button>
+      <canvas id="lienzoRecorrido" style="width:100%;margin-top:12px;border-radius:10px;background:var(--fondo);border:1px solid var(--borde);display:none"></canvas>
+      <div id="recResumen" style="font-size:12px;color:var(--texto2);margin-top:8px"></div>
+    </div>
     <div id="listaAlertas"></div>
   </section>
 
@@ -397,6 +407,7 @@ async function arrancarApp(){
   if(esSupervisorOAdmin()) $('formNuevoBloque').style.display = 'block';
 
   $('regFecha').value = hoyISO();
+  $('recFecha').value = hoyISO();
   const d7 = new Date(); d7.setDate(d7.getDate()-7);
   $('alDesde').value = d7.toLocaleDateString('sv-SE',{timeZone:'America/Bogota'});
   $('alHasta').value = hoyISO();
@@ -404,6 +415,7 @@ async function arrancarApp(){
   actualizarBanner();
   iniciarGPS();
   pedirPermisoNotificaciones();
+  poblarSelectorOperarios();
 
   await cargarBloques();
   await cargarHorometrosBloque();
@@ -1020,6 +1032,114 @@ async function toggleHorometro(id, activo, nombre, codBloque){
   await cargarListaHorometros();
   await cargarHorometrosBloque();
   await cargarEstadoDia();
+}
+
+/* ------------------------- mapa de recorrido ------------------------- */
+async function poblarSelectorOperarios(){
+  const sel = $('recUsuario');
+  sel.innerHTML = `<option value="${perfil.id}">${perfil.nombre} (yo)</option>`;
+  if(esSupervisorOAdmin() && hayRed()){
+    const { data } = await db.from('perfiles').select('id, nombre').eq('activo', true).order('nombre');
+    if(data && data.length > 1){
+      sel.innerHTML = data.map(p => `<option value="${p.id}" ${p.id===perfil.id?'selected':''}>${p.nombre}</option>`).join('');
+    }
+  }
+}
+
+async function cargarRecorrido(){
+  if(!hayRed()){ aviso('El mapa de recorrido requiere conexión.', true); return; }
+  const fecha = $('recFecha').value || hoyISO();
+  const uid = $('recUsuario').value || perfil.id;
+
+  // Rango del día en hora de Colombia (UTC-5)
+  const ini = fecha + 'T00:00:00-05:00';
+  const fin = fecha + 'T23:59:59-05:00';
+  const { data: pts, error } = await db.from('recorridos')
+    .select('lat, lng, evento, registrado_en')
+    .eq('usuario_id', uid).gte('registrado_en', ini).lte('registrado_en', fin)
+    .order('registrado_en', { ascending:true }).limit(2000);
+  if(error){ aviso(error.message, true); return; }
+
+  const canvas = $('lienzoRecorrido');
+  const resumen = $('recResumen');
+  if(!pts || !pts.length){
+    canvas.style.display = 'none';
+    resumen.textContent = 'Sin puntos de recorrido para esa fecha. (El GPS registra mientras la app está abierta.)';
+    return;
+  }
+
+  // Preparar canvas nítido
+  canvas.style.display = 'block';
+  const cssW = canvas.clientWidth || 600, cssH = 320;
+  const dpr = window.devicePixelRatio || 1;
+  canvas.width = cssW * dpr; canvas.height = cssH * dpr;
+  canvas.style.height = cssH + 'px';
+  const ctx = canvas.getContext('2d');
+  ctx.scale(dpr, dpr);
+
+  const estilo = getComputedStyle(document.documentElement);
+  const cAmbar = estilo.getPropertyValue('--ambar').trim();
+  const cTexto2 = estilo.getPropertyValue('--texto2').trim();
+  const cVerde = estilo.getPropertyValue('--verde').trim();
+  const cRojo = estilo.getPropertyValue('--rojo').trim();
+
+  // Bounding box: puntos del recorrido + bloques con GPS
+  const bloquesGPS = bloques.filter(b => b.lat != null && b.lng != null);
+  const todos = [...pts, ...bloquesGPS.map(b => ({lat:b.lat, lng:b.lng}))];
+  let minLat = Math.min(...todos.map(p=>p.lat)), maxLat = Math.max(...todos.map(p=>p.lat));
+  let minLng = Math.min(...todos.map(p=>p.lng)), maxLng = Math.max(...todos.map(p=>p.lng));
+  const margen = 0.00025;
+  minLat -= margen; maxLat += margen; minLng -= margen; maxLng += margen;
+
+  // Proyección simple con corrección de longitud por latitud, manteniendo proporción
+  const cosLat = Math.cos(((minLat+maxLat)/2) * Math.PI/180);
+  const spanX = (maxLng - minLng) * cosLat, spanY = (maxLat - minLat);
+  const pad = 26;
+  const esc = Math.min((cssW - 2*pad)/spanX, (cssH - 2*pad)/spanY);
+  const px = p => pad + ((p.lng - minLng) * cosLat) * esc + (cssW - 2*pad - spanX*esc)/2;
+  const py = p => cssH - pad - ((p.lat - minLat) * esc) - (cssH - 2*pad - spanY*esc)/2;
+
+  ctx.clearRect(0, 0, cssW, cssH);
+
+  // Bloques (referencia)
+  ctx.font = '10px IBM Plex Mono, monospace';
+  bloquesGPS.forEach(b => {
+    ctx.fillStyle = cTexto2;
+    ctx.beginPath(); ctx.arc(px(b), py(b), 4, 0, Math.PI*2); ctx.fill();
+    ctx.fillText(b.codigo, px(b)+6, py(b)+3);
+  });
+
+  // Línea del recorrido
+  ctx.strokeStyle = cAmbar; ctx.lineWidth = 2; ctx.lineJoin = 'round';
+  ctx.beginPath();
+  pts.forEach((p,i) => i ? ctx.lineTo(px(p), py(p)) : ctx.moveTo(px(p), py(p)));
+  ctx.stroke();
+
+  // Puntos de lectura (cuadros ámbar) y pings (puntos pequeños)
+  pts.forEach(p => {
+    if(p.evento === 'lectura' || p.evento === 'justificacion'){
+      ctx.fillStyle = cAmbar;
+      ctx.fillRect(px(p)-3.5, py(p)-3.5, 7, 7);
+    } else {
+      ctx.fillStyle = cAmbar;
+      ctx.beginPath(); ctx.arc(px(p), py(p), 2, 0, Math.PI*2); ctx.fill();
+    }
+  });
+
+  // Inicio y fin
+  const a = pts[0], z = pts[pts.length-1];
+  ctx.fillStyle = cVerde;
+  ctx.beginPath(); ctx.arc(px(a), py(a), 6, 0, Math.PI*2); ctx.fill();
+  ctx.fillStyle = cRojo;
+  ctx.beginPath(); ctx.arc(px(z), py(z), 6, 0, Math.PI*2); ctx.fill();
+
+  // Resumen: distancia total y horario
+  let dist = 0;
+  for(let i=1; i<pts.length; i++) dist += distanciaKm(pts[i-1].lat, pts[i-1].lng, pts[i].lat, pts[i].lng);
+  const hIni = new Date(a.registrado_en).toLocaleTimeString('es-CO', {hour:'2-digit', minute:'2-digit', timeZone:'America/Bogota'});
+  const hFin = new Date(z.registrado_en).toLocaleTimeString('es-CO', {hour:'2-digit', minute:'2-digit', timeZone:'America/Bogota'});
+  const nLect = pts.filter(p => p.evento === 'lectura').length;
+  resumen.innerHTML = `🟢 Inicio ${hIni} · 🔴 Fin ${hFin} · <b>${(dist*1000).toFixed(0)} m recorridos</b> · ${pts.length} puntos GPS · ▪ lecturas: ${nLect} · Los puntos grises son los bloques.`;
 }
 
 /* ------------------------- navegación ------------------------- */
