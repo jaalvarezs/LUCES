@@ -788,7 +788,12 @@ async function cargarEstadoDia(){
 }
 
 function bloquesPendientes(){
-  return bloques.filter(b => !estadoDia.registrados.has(b.id) && !estadoDia.justificados.has(b.id));
+  // Solo bloques con al menos un horómetro activo (los bloques "sin luces" no exigen registro)
+  const horos = lsGet('cacheHorometros', []);
+  const conLuces = new Set(horos.map(h => h.bloque_id));
+  return bloques.filter(b => conLuces.has(b.id)
+    && !estadoDia.registrados.has(b.id)
+    && !estadoDia.justificados.has(b.id));
 }
 
 function pintarPendientes(){
@@ -969,9 +974,10 @@ async function crearHorometro(){
 
 async function cargarListaHorometros(){
   const { data, error } = await db.from('horometros')
-    .select('*, bloques(codigo, naves)').eq('activo', true).order('bloque_id').order('nave_desde');
+    .select('*, bloques(codigo, naves)').order('bloque_id').order('nave_desde');
   if(error){ aviso(error.message, true); return; }
-  lsSet('cacheHorometros', data.map(({bloques:_, ...h}) => h));
+  // La caché de trabajo (registro, pendientes) solo lleva los activos
+  lsSet('cacheHorometros', data.filter(h => h.activo).map(({bloques:_, ...h}) => h));
   pintarGrupoHoros(data.map(h => ({...h, _codigo: h.bloques?.codigo, _naves: h.bloques?.naves})));
 }
 function pintarListaHorometrosDesdeCache(){
@@ -983,15 +989,37 @@ function pintarListaHorometrosDesdeCache(){
 }
 function pintarGrupoHoros(data){
   if(!data.length){ $('listaHorometros').innerHTML = '<div class="vacio">Sin horómetros.</div>'; return; }
+  const gestiona = esSupervisorOAdmin() && hayRed();
   const porBloque = {};
   data.forEach(h => { (porBloque[h._codigo] = porBloque[h._codigo] || []).push(h); });
   $('listaHorometros').innerHTML = Object.entries(porBloque).map(([cod, hs]) => `
     <div class="tarjeta" style="padding:12px 14px">
-      <div style="font-weight:700;margin-bottom:6px">Bloque ${cod} <span style="color:var(--texto2);font-weight:400;font-size:12px">(${hs[0]._naves} naves)</span></div>
-      ${hs.map(h => `<div style="display:flex;justify-content:space-between;font-size:13px;padding:5px 0;border-top:1px solid var(--borde)">
-        <span>${h.nombre}</span><span class="mono" style="color:var(--texto2)">naves ${h.nave_desde}–${h.nave_hasta}</span>
+      <div style="font-weight:700;margin-bottom:6px">Bloque ${cod}
+        <span style="color:var(--texto2);font-weight:400;font-size:12px">(${hs[0]._naves} naves)</span>
+        ${hs.every(h => !h.activo) ? '<span style="color:var(--ambar);font-size:11px;font-weight:700"> · SIN LUCES</span>' : ''}
+      </div>
+      ${hs.map(h => `<div style="display:flex;justify-content:space-between;align-items:center;gap:8px;font-size:13px;padding:5px 0;border-top:1px solid var(--borde);${h.activo?'':'opacity:.55'}">
+        <span>${h.nombre}${h.activo ? '' : ' <span style="color:var(--ambar);font-size:11px">⏸ pausado</span>'}</span>
+        <span style="display:flex;align-items:center;gap:8px">
+          <span class="mono" style="color:var(--texto2)">naves ${h.nave_desde}–${h.nave_hasta}</span>
+          ${gestiona ? `<button class="miniBtn" onclick="toggleHorometro(${h.id}, ${h.activo}, '${h.nombre}', '${cod}')">${h.activo ? '⏸ Parar' : '▶ Reactivar'}</button>` : ''}
+        </span>
       </div>`).join('')}
     </div>`).join('');
+}
+
+async function toggleHorometro(id, activo, nombre, codBloque){
+  if(!hayRed()){ aviso('Se requiere conexión para pausar o reactivar horómetros.', true); return; }
+  const msg = activo
+    ? `¿Parar el horómetro ${nombre} del bloque ${codBloque}?\n\nÚsese cuando el bloque sale de luces (fin de fotoperiodo). No se exigirá registro diario ni aparecerá en pendientes. Las lecturas históricas se conservan.`
+    : `¿Reactivar el horómetro ${nombre} del bloque ${codBloque}?\n\nEl bloque vuelve al registro diario. Nota: la primera lectura tras la pausa puede marcar alerta por el delta acumulado — registre la observación "reingreso a luces".`;
+  if(!confirm(msg)) return;
+  const { error } = await db.from('horometros').update({ activo: !activo }).eq('id', id);
+  if(error){ aviso('Error: ' + error.message, true); return; }
+  aviso(activo ? `⏸ Horómetro ${nombre} (bloque ${codBloque}) parado.` : `▶ Horómetro ${nombre} (bloque ${codBloque}) reactivado.`);
+  await cargarListaHorometros();
+  await cargarHorometrosBloque();
+  await cargarEstadoDia();
 }
 
 /* ------------------------- navegación ------------------------- */
