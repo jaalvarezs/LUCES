@@ -394,7 +394,7 @@ async function arrancarApp(){
   $('usuarioNombre').textContent = perfil.nombre;
   $('usuarioRol').textContent = perfil.rol + (hayRed() ? '' : ' · offline');
   if(esSupervisorOAdmin()) $('formNuevoHoro').style.display = 'block';
-  if(perfil.rol === 'administrador') $('formNuevoBloque').style.display = 'block';
+  if(esSupervisorOAdmin()) $('formNuevoBloque').style.display = 'block';
 
   $('regFecha').value = hoyISO();
   const d7 = new Date(); d7.setDate(d7.getDate()-7);
@@ -500,14 +500,59 @@ async function cargarBloques(){
 function bloquePorId(id){ return bloques.find(b => b.id === Number(id)); }
 
 function pintarTablaBloques(){
-  const puedeGPS = esSupervisorOAdmin();
+  const puedeEditar = esSupervisorOAdmin();
   $('tablaBloques').innerHTML = bloques.map(b => `
     <tr>
       <td><b>${b.codigo}</b></td>
       <td class="mono">${b.naves}</td>
       <td class="mono">${Number(b.medias_naves) || '—'}</td>
-      <td>${b.lat ? '📍' : (puedeGPS ? `<button class="miniBtn" onclick="capturarGPS(${b.id})">Capturar</button>` : '—')}</td>
+      <td style="white-space:nowrap">
+        ${b.lat ? '📍' : (puedeEditar ? `<button class="miniBtn" onclick="capturarGPS(${b.id})">GPS</button>` : '—')}
+        ${puedeEditar ? ` <button class="miniBtn" onclick="editarBloque(${b.id})">✎</button>` : ''}
+      </td>
     </tr>`).join('');
+}
+
+async function editarBloque(bloqueId){
+  if(!hayRed()){ aviso('Se requiere conexión para editar bloques.', true); return; }
+  const b = bloquePorId(bloqueId);
+
+  const navesTxt = prompt(`Bloque ${b.codigo} — número de naves (actual: ${b.naves}):`, b.naves);
+  if(navesTxt === null) return;
+  const naves = parseInt(navesTxt);
+  if(isNaN(naves) || naves < 1){ aviso('Número de naves inválido.', true); return; }
+
+  // No permitir reducir por debajo del rango de horómetros existentes
+  const horos = lsGet('cacheHorometros', []).filter(h => h.bloque_id === bloqueId);
+  const maxHasta = horos.length ? Math.max(...horos.map(h => h.nave_hasta)) : 0;
+  if(naves < maxHasta){
+    aviso(`No se puede reducir a ${naves}: el horómetro más amplio del bloque llega hasta la nave ${maxHasta}.`, true);
+    return;
+  }
+
+  const mediasTxt = prompt(`Bloque ${b.codigo} — medias naves (actual: ${Number(b.medias_naves)}):`, Number(b.medias_naves));
+  if(mediasTxt === null) return;
+  const medias = parseFloat(mediasTxt);
+  if(isNaN(medias) || medias < 0){ aviso('Valor de medias naves inválido.', true); return; }
+
+  const { error } = await db.from('bloques').update({ naves, medias_naves: medias }).eq('id', bloqueId);
+  if(error){ aviso('Error: ' + error.message, true); return; }
+
+  // Si se ampliaron las naves, ofrecer extender los horómetros que cubrían hasta la última nave anterior
+  if(naves > b.naves){
+    const cubrianFinal = horos.filter(h => h.nave_hasta === b.naves);
+    for(const h of cubrianFinal){
+      if(confirm(`El horómetro ${h.nombre} cubría hasta la nave ${b.naves}. ¿Extenderlo hasta la nueva nave ${naves}?`)){
+        const { error: eH } = await db.from('horometros').update({ nave_hasta: naves }).eq('id', h.id);
+        if(eH) aviso(`No se pudo extender ${h.nombre}: ${eH.message}`, true);
+      }
+    }
+  }
+
+  aviso(`Bloque ${b.codigo} actualizado: ${naves} naves, ${medias} medias ✔`);
+  await cargarBloques();
+  await cargarListaHorometros();
+  await cargarHorometrosBloque();
 }
 
 async function crearBloque(){

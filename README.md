@@ -21,6 +21,7 @@ En el SQL Editor de tu proyecto Supabase ejecuta **en orden**:
 
 1. `horometros_schema.sql` (esquema base: tablas, triggers, RLS, 50 bloques)
 2. `actualizacion_v2.sql` (GPS por bloque, justificaciones, recorridos)
+3. `actualizacion_v3.sql` (supervisores pueden crear y editar bloques)
 
 Luego crea los usuarios en **Authentication → Users** con correos sintéticos internos
 (`nombreusuario@trigal.local` + **Auto Confirm User** ✅). En la app, cada persona inicia
@@ -75,6 +76,7 @@ La app queda en `https://TU_USUARIO.github.io/horometros-fotoperiodo/`.
 | `icono-192.png`, `icono-512.png` | Iconos de la app |
 | `horometros_schema.sql` | Esquema base de la BD (ejecutar primero) |
 | `actualizacion_v2.sql` | Actualización: GPS, justificaciones, recorridos |
+| `actualizacion_v3.sql` | Actualización: permisos de bloques para supervisores |
 
 ## Parámetros ajustables (en `index.html`, sección CONFIG)
 
