@@ -1,0 +1,897 @@
+<!DOCTYPE html>
+<html lang="es" data-tema="noche">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="theme-color" content="#0c1210">
+<title>Horómetros · Fotoperiodo</title>
+<link rel="manifest" href="manifest.json">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Archivo:wght@500;700;800&family=IBM+Plex+Mono:wght@500;600&display=swap" rel="stylesheet">
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<style>
+  /* ============ MODO NOCHE (por defecto) ============ */
+  :root, html[data-tema="noche"]{
+    --fondo:#0c1210; --panel:#141d19; --panel2:#1a2620; --borde:#25342c;
+    --texto:#e8efe9; --texto2:#8fa398;
+    --ambar:#ffb640; --ambar-suave:rgba(255,182,64,.12);
+    --rojo:#ff6b57; --rojo-suave:rgba(255,107,87,.12);
+    --verde:#5fd68a; --verde-suave:rgba(95,214,138,.10);
+    --sombra:rgba(0,0,0,.5);
+  }
+  /* ============ MODO DÍA ============ */
+  html[data-tema="dia"]{
+    --fondo:#f2f4ef; --panel:#ffffff; --panel2:#eef1ea; --borde:#d5dbd0;
+    --texto:#1d2620; --texto2:#5d6d62;
+    --ambar:#c47d00; --ambar-suave:rgba(196,125,0,.12);
+    --rojo:#c92f1c; --rojo-suave:rgba(201,47,28,.10);
+    --verde:#1e7d45; --verde-suave:rgba(30,125,69,.10);
+    --sombra:rgba(30,40,32,.15);
+  }
+  *{box-sizing:border-box;margin:0;padding:0}
+  body{background:var(--fondo);color:var(--texto);font-family:'Archivo',system-ui,sans-serif;min-height:100vh;transition:background .25s,color .25s}
+  .mono{font-family:'IBM Plex Mono',monospace;font-variant-numeric:tabular-nums}
+
+  #vistaLogin{display:flex;align-items:center;justify-content:center;min-height:100vh;padding:20px}
+  .tarjetaLogin{width:100%;max-width:380px;background:var(--panel);border:1px solid var(--borde);border-radius:16px;padding:32px 28px}
+  .logoGuirnalda{display:flex;gap:8px;justify-content:center;margin-bottom:18px}
+  .logoGuirnalda span{width:10px;height:10px;border-radius:50%;background:var(--ambar);box-shadow:0 0 12px var(--ambar);animation:parpadeo 2.4s infinite}
+  .logoGuirnalda span:nth-child(2){animation-delay:.3s}.logoGuirnalda span:nth-child(3){animation-delay:.6s}
+  .logoGuirnalda span:nth-child(4){animation-delay:.9s}.logoGuirnalda span:nth-child(5){animation-delay:1.2s}
+  @keyframes parpadeo{0%,100%{opacity:1}50%{opacity:.35;box-shadow:none}}
+  @media (prefers-reduced-motion: reduce){.logoGuirnalda span{animation:none}}
+  h1{font-size:20px;font-weight:800;text-align:center;letter-spacing:-.02em}
+  .sub{color:var(--texto2);font-size:13px;text-align:center;margin:6px 0 24px}
+  label{display:block;font-size:12px;color:var(--texto2);margin:14px 0 6px;text-transform:uppercase;letter-spacing:.06em}
+  input,select,textarea{width:100%;background:var(--fondo);border:1px solid var(--borde);border-radius:10px;color:var(--texto);padding:12px 14px;font-size:15px;font-family:inherit}
+  input:focus,select:focus,textarea:focus{outline:2px solid var(--ambar);outline-offset:1px;border-color:transparent}
+  .btn{width:100%;margin-top:20px;background:var(--ambar);color:#fff;border:none;border-radius:10px;padding:13px;font-size:15px;font-weight:700;font-family:inherit;cursor:pointer}
+  html[data-tema="noche"] .btn{color:#1a1206}
+  .btn:disabled{opacity:.5;cursor:default}
+
+  #vistaApp{display:none;max-width:760px;margin:0 auto;padding:0 16px 96px}
+  header{display:flex;align-items:center;justify-content:space-between;padding:16px 0 12px;gap:8px}
+  header .titulo{font-weight:800;font-size:17px}
+  .rolBadge{font-size:11px;text-transform:uppercase;letter-spacing:.08em;background:var(--ambar-suave);color:var(--ambar);border-radius:999px;padding:4px 10px;font-weight:700;white-space:nowrap}
+  .iconBtn{background:var(--panel);border:1px solid var(--borde);color:var(--texto);border-radius:10px;width:38px;height:38px;font-size:17px;cursor:pointer}
+  .salir{background:none;border:none;color:var(--texto2);font-size:13px;cursor:pointer;font-family:inherit;text-decoration:underline}
+
+  /* Banner de conexión */
+  #bannerRed{display:none;align-items:center;justify-content:space-between;gap:10px;background:var(--ambar-suave);border:1px solid var(--ambar);color:var(--ambar);border-radius:12px;padding:10px 14px;font-size:13px;font-weight:700;margin-bottom:12px}
+  #bannerRed.visible{display:flex}
+  #bannerRed button{background:var(--ambar);border:none;color:#1a1206;border-radius:8px;padding:6px 12px;font-weight:700;font-family:inherit;cursor:pointer;font-size:12px}
+
+  nav{position:fixed;bottom:0;left:0;right:0;background:var(--panel);border-top:1px solid var(--borde);display:flex;z-index:10}
+  nav button{flex:1;background:none;border:none;color:var(--texto2);padding:11px 2px 13px;font-size:11px;font-family:inherit;cursor:pointer;display:flex;flex-direction:column;align-items:center;gap:3px;position:relative}
+  nav button.activo{color:var(--ambar)}
+  nav button .ico{font-size:17px}
+  .badgeNum{position:absolute;top:4px;right:calc(50% - 22px);background:var(--rojo);color:#fff;font-size:10px;font-weight:700;border-radius:999px;min-width:16px;height:16px;display:none;align-items:center;justify-content:center;padding:0 4px}
+
+  .seccion{display:none}
+  .seccion.activa{display:block}
+  h2{font-size:14px;font-weight:700;margin:16px 0 10px;color:var(--texto2);text-transform:uppercase;letter-spacing:.06em}
+  .tarjeta{background:var(--panel);border:1px solid var(--borde);border-radius:14px;padding:16px;margin-bottom:12px}
+  .fila{display:flex;gap:10px}
+  .fila>*{flex:1}
+
+  .horoItem{background:var(--panel2);border:1px solid var(--borde);border-radius:12px;padding:14px;margin-top:10px}
+  .horoCab{display:flex;justify-content:space-between;align-items:baseline;gap:8px}
+  .horoNombre{font-weight:700;font-size:15px}
+  .horoRango{color:var(--texto2);font-size:12px}
+  .ultima{font-size:12px;color:var(--texto2);margin-top:4px}
+  .ultima b{color:var(--texto)}
+  .deltaPrevio{margin-top:10px;border-radius:10px;padding:10px 12px;font-size:13px;display:none}
+  .deltaPrevio.ok{display:block;background:var(--verde-suave);color:var(--verde)}
+  .deltaPrevio.mal{display:block;background:var(--rojo-suave);color:var(--rojo);font-weight:700}
+  .barraLuz{height:6px;border-radius:3px;background:var(--fondo);margin-top:8px;overflow:hidden}
+  .barraLuz i{display:block;height:100%;background:var(--ambar);box-shadow:0 0 8px var(--ambar);border-radius:3px;transition:width .3s}
+  .barraLuz i.roja{background:var(--rojo);box-shadow:0 0 8px var(--rojo)}
+  .obsCampo{display:none;margin-top:10px}
+  .obsCampo.visible{display:block}
+  .yaRegistrada{margin-top:10px;font-size:13px;color:var(--verde);background:var(--verde-suave);border-radius:10px;padding:10px 12px}
+  .enCola{margin-top:10px;font-size:13px;color:var(--ambar);background:var(--ambar-suave);border-radius:10px;padding:10px 12px}
+  .guardarMini{margin-top:12px;width:100%;background:var(--ambar);color:#1a1206;border:none;border-radius:10px;padding:11px;font-weight:700;font-family:inherit;font-size:14px;cursor:pointer}
+  html[data-tema="dia"] .guardarMini{color:#fff}
+
+  /* Pendientes */
+  .pendItem{background:var(--panel);border:1px solid var(--borde);border-left:4px solid var(--ambar);border-radius:12px;padding:14px;margin-bottom:10px}
+  .pendItem.justificado{border-left-color:var(--verde);opacity:.75}
+  .pendCab{display:flex;justify-content:space-between;align-items:center;gap:8px}
+  .pendBloque{font-weight:800;font-size:16px}
+  .pendEta{font-size:12px;color:var(--texto2);text-align:right}
+  .pendEta b{color:var(--ambar);font-size:14px}
+  .btnJust{margin-top:10px;background:var(--panel2);border:1px solid var(--borde);color:var(--texto);border-radius:8px;padding:8px 12px;font-family:inherit;font-size:13px;cursor:pointer}
+  .resumenDia{display:flex;gap:10px;margin-bottom:12px}
+  .kpi{flex:1;background:var(--panel);border:1px solid var(--borde);border-radius:12px;padding:12px;text-align:center}
+  .kpi .num{font-size:24px;font-weight:800}
+  .kpi .lbl{font-size:11px;color:var(--texto2);text-transform:uppercase;letter-spacing:.05em}
+
+  .alertaItem{background:var(--panel);border:1px solid var(--borde);border-left:4px solid var(--rojo);border-radius:12px;padding:14px;margin-bottom:10px}
+  .alertaCab{display:flex;justify-content:space-between;font-size:13px;color:var(--texto2)}
+  .alertaDelta{font-size:22px;font-weight:800;color:var(--rojo);margin:6px 0 2px}
+  .alertaObs{font-size:13px;color:var(--texto);background:var(--panel2);border-radius:8px;padding:8px 10px;margin-top:8px}
+
+  table{width:100%;border-collapse:collapse;font-size:13px}
+  th{text-align:left;color:var(--texto2);font-weight:600;padding:8px 6px;border-bottom:1px solid var(--borde);text-transform:uppercase;font-size:11px;letter-spacing:.05em}
+  td{padding:9px 6px;border-bottom:1px solid var(--borde)}
+  .vacio{color:var(--texto2);text-align:center;padding:26px 10px;font-size:14px}
+  .aviso{position:fixed;left:50%;transform:translateX(-50%);bottom:76px;background:var(--panel2);border:1px solid var(--borde);color:var(--texto);padding:12px 18px;border-radius:12px;font-size:14px;z-index:50;max-width:90%;box-shadow:0 8px 24px var(--sombra)}
+  .aviso.error{border-color:var(--rojo);color:var(--rojo)}
+  .gpsChip{font-size:11px;color:var(--texto2)}
+  .gpsChip.on{color:var(--verde)}
+  .miniBtn{background:var(--panel2);border:1px solid var(--borde);color:var(--texto);border-radius:8px;padding:6px 10px;font-family:inherit;font-size:12px;cursor:pointer}
+</style>
+</head>
+<body>
+
+<div id="vistaLogin">
+  <div class="tarjetaLogin">
+    <div class="logoGuirnalda"><span></span><span></span><span></span><span></span><span></span></div>
+    <h1>Horómetros · Fotoperiodo</h1>
+    <p class="sub">Validación de energía en guirnaldas por bloque</p>
+    <label for="loginEmail">Usuario</label>
+    <input id="loginEmail" type="text" autocomplete="username" placeholder="ej. jperez">
+    <label for="loginPass">Contraseña</label>
+    <input id="loginPass" type="password" autocomplete="current-password" placeholder="••••••••">
+    <button class="btn" id="btnLogin" onclick="iniciarSesion()">Entrar</button>
+    <p class="sub" style="margin-top:16px" id="loginOffline"></p>
+  </div>
+</div>
+
+<div id="vistaApp">
+  <header>
+    <div>
+      <div class="titulo">Horómetros</div>
+      <div style="font-size:12px;color:var(--texto2)"><span id="usuarioNombre"></span> · <span class="gpsChip" id="gpsEstado">GPS…</span></div>
+    </div>
+    <div style="display:flex;align-items:center;gap:8px">
+      <span class="rolBadge" id="usuarioRol"></span>
+      <button class="iconBtn" id="btnTema" onclick="alternarTema()" title="Modo día / noche">☀</button>
+      <button class="salir" onclick="cerrarSesion()">Salir</button>
+    </div>
+  </header>
+
+  <div id="bannerRed">
+    <span id="bannerTexto">Sin conexión — los registros se guardan en el dispositivo.</span>
+    <button onclick="sincronizarCola()" id="btnSync">Sincronizar</button>
+  </div>
+
+  <!-- REGISTRO -->
+  <section class="seccion activa" id="sec-registro">
+    <div class="tarjeta">
+      <div class="fila">
+        <div><label for="regFecha">Fecha</label><input type="date" id="regFecha"></div>
+        <div><label for="regBloque">Bloque</label><select id="regBloque" onchange="cargarHorometrosBloque()"></select></div>
+      </div>
+      <div id="infoBloque" style="font-size:12px;color:var(--texto2);margin-top:8px"></div>
+    </div>
+    <div id="listaHorometrosRegistro"></div>
+  </section>
+
+  <!-- PENDIENTES -->
+  <section class="seccion" id="sec-pendientes">
+    <div class="resumenDia">
+      <div class="kpi"><div class="num" style="color:var(--verde)" id="kpiReg">0</div><div class="lbl">Registrados</div></div>
+      <div class="kpi"><div class="num" style="color:var(--ambar)" id="kpiPend">0</div><div class="lbl">Pendientes</div></div>
+      <div class="kpi"><div class="num" style="color:var(--texto2)" id="kpiJust">0</div><div class="lbl">Justificados</div></div>
+    </div>
+    <h2>Bloques sin registrar hoy <span id="etaTotal" style="text-transform:none;letter-spacing:0"></span></h2>
+    <div id="listaPendientes"></div>
+  </section>
+
+  <!-- ALERTAS -->
+  <section class="seccion" id="sec-alertas">
+    <h2>Alertas (&lt; 2 h de luz)</h2>
+    <div class="tarjeta">
+      <div class="fila">
+        <div><label for="alDesde">Desde</label><input type="date" id="alDesde" onchange="cargarAlertas()"></div>
+        <div><label for="alHasta">Hasta</label><input type="date" id="alHasta" onchange="cargarAlertas()"></div>
+      </div>
+    </div>
+    <div id="listaAlertas"></div>
+  </section>
+
+  <!-- HORÓMETROS -->
+  <section class="seccion" id="sec-horometros">
+    <div class="tarjeta" id="formNuevoHoro" style="display:none">
+      <h2 style="margin-top:0">Agregar horómetro</h2>
+      <label for="nhBloque">Bloque</label>
+      <select id="nhBloque" onchange="pintarLimiteNaves()"></select>
+      <div id="nhLimite" style="font-size:12px;color:var(--ambar);margin-top:6px"></div>
+      <label for="nhNombre">Nombre</label>
+      <input id="nhNombre" placeholder="ej. H2">
+      <div class="fila" style="margin-top:4px">
+        <div><label for="nhDesde">Nave desde</label><input type="number" id="nhDesde" min="1" value="1"></div>
+        <div><label for="nhHasta">Nave hasta</label><input type="number" id="nhHasta" min="1"></div>
+      </div>
+      <button class="btn" onclick="crearHorometro()">Guardar horómetro</button>
+    </div>
+    <h2>Horómetros por bloque</h2>
+    <div id="listaHorometros"></div>
+  </section>
+
+  <!-- BLOQUES -->
+  <section class="seccion" id="sec-bloques">
+    <h2>Bloques del cultivo</h2>
+    <div class="tarjeta" style="padding:6px 12px">
+      <table>
+        <thead><tr><th>Bloque</th><th>Naves</th><th>Medias</th><th>GPS</th></tr></thead>
+        <tbody id="tablaBloques"></tbody>
+      </table>
+    </div>
+  </section>
+
+  <nav>
+    <button class="activo" onclick="irA('registro',this)"><span class="ico">✎</span>Registro</button>
+    <button onclick="irA('pendientes',this)"><span class="ico">🚶</span>Pendientes<span class="badgeNum" id="numPend"></span></button>
+    <button onclick="irA('alertas',this)"><span class="ico">⚠</span>Alertas<span class="badgeNum" id="numAlertas"></span></button>
+    <button onclick="irA('horometros',this)"><span class="ico">⏱</span>Horóm.</button>
+    <button onclick="irA('bloques',this)"><span class="ico">▦</span>Bloques</button>
+  </nav>
+</div>
+
+<script>
+/* =========================================================================
+   CONFIG — reemplaza con los datos de tu proyecto Supabase
+   ========================================================================= */
+const SUPABASE_URL = 'https://TU-PROYECTO.supabase.co';
+const SUPABASE_ANON_KEY = 'TU_ANON_KEY';
+
+/* Fotoperiodo real: luces de 9 p.m. a 3 a.m., cicladas 10 min luz × 20 min
+   oscuridad = 2.0 horas acumuladas por noche en el horómetro. */
+const UMBRAL_HORAS = 2;        // alerta si delta < 2 h (noche incompleta)
+const HORAS_ESPERADAS = 2;     // delta esperado por noche (barra al 100%)
+const VEL_CAMINATA_KMH = 4;    // velocidad para estimar tiempo de recorrido
+const MIN_POR_BLOQUE = 3;      // minutos estimados de registro por bloque
+const HORA_INICIO_REGISTRO = 6;   // ventana laboral de registro: 6 a.m.
+const HORA_FIN_REGISTRO = 14;     // hasta las 2 p.m.
+const HORA_AVISO_PENDIENTES = 13; // a la 1 p.m. se alerta si hay bloques sin registrar
+
+const db = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+
+/* Dominio interno para inicio de sesión con nombre de usuario:
+   el usuario escribe 'jperez' y la app lo convierte en 'jperez@trigal.local'.
+   Los usuarios se crean en Supabase con ese correo sintético + Auto Confirm. */
+const DOMINIO_USUARIOS = '@trigal.local';
+
+let perfil = null;
+let bloques = [];
+let horometrosBloque = [];
+let posicion = null;            // {lat, lng, acc}
+let estadoDia = { registrados:new Set(), justificados:new Set() };
+
+/* ------------------------- utilidades ------------------------- */
+const $ = id => document.getElementById(id);
+const hoyISO = () => new Date().toLocaleDateString('sv-SE', {timeZone:'America/Bogota'});
+const lsGet = (k, def) => { try { return JSON.parse(localStorage.getItem(k)) ?? def; } catch { return def; } };
+const lsSet = (k, v) => localStorage.setItem(k, JSON.stringify(v));
+
+function aviso(msg, esError=false){
+  const d = document.createElement('div');
+  d.className = 'aviso' + (esError ? ' error' : '');
+  d.textContent = msg;
+  document.body.appendChild(d);
+  setTimeout(()=>d.remove(), 4200);
+}
+function esSupervisorOAdmin(){ return perfil && ['supervisor','administrador'].includes(perfil.rol); }
+function hayRed(){ return navigator.onLine; }
+function horaBogota(){
+  return Number(new Date().toLocaleString('es-CO', { hour:'numeric', hour12:false, timeZone:'America/Bogota' }));
+}
+function dentroVentanaRegistro(){
+  const h = horaBogota();
+  return h >= HORA_INICIO_REGISTRO && h < HORA_FIN_REGISTRO;
+}
+
+/* Distancia haversine en km */
+function distanciaKm(lat1, lng1, lat2, lng2){
+  const R = 6371, rad = x => x * Math.PI / 180;
+  const dLat = rad(lat2-lat1), dLng = rad(lng2-lng1);
+  const a = Math.sin(dLat/2)**2 + Math.cos(rad(lat1))*Math.cos(rad(lat2))*Math.sin(dLng/2)**2;
+  return 2 * R * Math.asin(Math.sqrt(a));
+}
+
+/* ------------------------- TEMA día / noche ------------------------- */
+function aplicarTema(t){
+  document.documentElement.dataset.tema = t;
+  $('btnTema').textContent = t === 'noche' ? '☀' : '☾';
+  document.querySelector('meta[name=theme-color]').content = t === 'noche' ? '#0c1210' : '#f2f4ef';
+  lsSet('tema', t);
+}
+function alternarTema(){
+  aplicarTema(document.documentElement.dataset.tema === 'noche' ? 'dia' : 'noche');
+}
+
+/* ------------------------- GPS ------------------------- */
+function iniciarGPS(){
+  if(!('geolocation' in navigator)){ $('gpsEstado').textContent = 'GPS no disponible'; return; }
+  navigator.geolocation.watchPosition(
+    p => {
+      posicion = { lat:p.coords.latitude, lng:p.coords.longitude, acc:p.coords.accuracy };
+      const el = $('gpsEstado');
+      el.textContent = `GPS ±${Math.round(p.coords.accuracy)} m`;
+      el.classList.add('on');
+      pintarPendientes(); // refrescar ETAs
+    },
+    () => { $('gpsEstado').textContent = 'GPS sin permiso'; },
+    { enableHighAccuracy:true, maximumAge:15000, timeout:20000 }
+  );
+  // ping periódico del recorrido (cada 5 min, solo con red)
+  setInterval(() => registrarPosicion('ping'), 5 * 60 * 1000);
+}
+
+async function registrarPosicion(evento){
+  if(!posicion || !perfil) return;
+  const fila = { usuario_id: perfil.id, lat: posicion.lat, lng: posicion.lng,
+                 precision_m: Math.round(posicion.acc*10)/10, evento };
+  if(hayRed()){
+    await db.from('recorridos').insert(fila);
+  } else {
+    const cola = lsGet('colaRecorridos', []);
+    fila.registrado_en = new Date().toISOString();
+    cola.push(fila); lsSet('colaRecorridos', cola);
+  }
+}
+
+/* ------------------------- sesión ------------------------- */
+async function iniciarSesion(){
+  if(!hayRed()){ aviso('Se requiere conexión para el primer inicio de sesión.', true); return; }
+  const btn = $('btnLogin'); btn.disabled = true;
+  let usuario = $('loginEmail').value.trim().toLowerCase();
+  if(usuario && !usuario.includes('@')) usuario += DOMINIO_USUARIOS;
+  const { error } = await db.auth.signInWithPassword({
+    email: usuario, password: $('loginPass').value
+  });
+  btn.disabled = false;
+  if(error){ aviso('Credenciales incorrectas: ' + error.message, true); return; }
+  await arrancarApp();
+}
+async function cerrarSesion(){
+  if(lsGet('colaLecturas', []).length && !confirm('Hay registros sin sincronizar. ¿Salir de todos modos?')) return;
+  await db.auth.signOut();
+  localStorage.removeItem('perfilCache');
+  location.reload();
+}
+
+async function arrancarApp(){
+  // Perfil: en línea desde Supabase; sin red, desde caché
+  if(hayRed()){
+    const { data: { user } } = await db.auth.getUser();
+    if(!user){ mostrarLoginOffline(); return; }
+    const { data: p } = await db.from('perfiles').select('*').eq('id', user.id).single();
+    if(!p){ aviso('No se encontró el perfil.', true); return; }
+    perfil = p; lsSet('perfilCache', p);
+  } else {
+    perfil = lsGet('perfilCache', null);
+    if(!perfil){ mostrarLoginOffline(); return; }
+  }
+
+  $('vistaLogin').style.display = 'none';
+  $('vistaApp').style.display = 'block';
+  $('usuarioNombre').textContent = perfil.nombre;
+  $('usuarioRol').textContent = perfil.rol + (hayRed() ? '' : ' · offline');
+  if(esSupervisorOAdmin()) $('formNuevoHoro').style.display = 'block';
+
+  $('regFecha').value = hoyISO();
+  const d7 = new Date(); d7.setDate(d7.getDate()-7);
+  $('alDesde').value = d7.toLocaleDateString('sv-SE',{timeZone:'America/Bogota'});
+  $('alHasta').value = hoyISO();
+
+  actualizarBanner();
+  iniciarGPS();
+  pedirPermisoNotificaciones();
+
+  await cargarBloques();
+  await cargarHorometrosBloque();
+  await cargarEstadoDia();
+  if(hayRed()){
+    await sincronizarCola();
+    await cargarAlertas();
+    await cargarListaHorometros();
+  } else {
+    pintarListaHorometrosDesdeCache();
+  }
+  // Revisión de pendientes cada 30 min
+  setInterval(revisarNotificacionPendientes, 30 * 60 * 1000);
+  revisarNotificacionPendientes();
+}
+
+function mostrarLoginOffline(){
+  $('loginOffline').textContent = hayRed() ? '' :
+    'Sin conexión: debe haber iniciado sesión al menos una vez con internet en este dispositivo.';
+}
+
+/* ------------------------- red / cola de sincronización ------------------------- */
+function actualizarBanner(){
+  const cola = lsGet('colaLecturas', []);
+  const banner = $('bannerRed');
+  if(!hayRed()){
+    banner.classList.add('visible');
+    $('bannerTexto').textContent = `Sin conexión — ${cola.length} registro(s) guardado(s) en el dispositivo.`;
+    $('btnSync').style.display = 'none';
+  } else if(cola.length){
+    banner.classList.add('visible');
+    $('bannerTexto').textContent = `${cola.length} registro(s) pendiente(s) de subir.`;
+    $('btnSync').style.display = 'inline-block';
+  } else {
+    banner.classList.remove('visible');
+  }
+}
+window.addEventListener('online', async () => { actualizarBanner(); await sincronizarCola(); });
+window.addEventListener('offline', actualizarBanner);
+
+async function sincronizarCola(){
+  if(!hayRed()) return;
+  let cola = lsGet('colaLecturas', []);
+  const fallidas = [];
+  for(const item of cola){
+    const { error } = await db.from('lecturas').insert(item);
+    if(error && !error.message.includes('duplicate') && !error.message.includes('lectura_unica')){
+      item._error = error.message;
+      fallidas.push(item);
+    }
+  }
+  lsSet('colaLecturas', fallidas);
+
+  // justificaciones en cola
+  let colaJ = lsGet('colaJustificaciones', []);
+  const fallidasJ = [];
+  for(const j of colaJ){
+    const { error } = await db.from('justificaciones_bloque').insert(j);
+    if(error && !error.message.includes('duplicate') && !error.message.includes('justificacion_unica')) fallidasJ.push(j);
+  }
+  lsSet('colaJustificaciones', fallidasJ);
+
+  // recorridos en cola
+  let colaR = lsGet('colaRecorridos', []);
+  if(colaR.length){
+    await db.from('recorridos').insert(colaR);
+    lsSet('colaRecorridos', []);
+  }
+
+  actualizarBanner();
+  if(cola.length && !fallidas.length) aviso(`✔ ${cola.length} registro(s) sincronizado(s).`);
+  if(fallidas.length) aviso(`${fallidas.length} registro(s) no se pudieron subir: ${fallidas[0]._error}`, true);
+  await cargarEstadoDia();
+  await cargarHorometrosBloque();
+  if(hayRed()) await cargarAlertas();
+}
+
+/* ------------------------- bloques ------------------------- */
+async function cargarBloques(){
+  if(hayRed()){
+    const { data, error } = await db.from('bloques').select('*').eq('activo', true).order('id');
+    if(!error){ bloques = data; lsSet('cacheBloques', data); }
+  }
+  if(!bloques.length) bloques = lsGet('cacheBloques', []);
+  if(!bloques.length){ aviso('Sin datos de bloques. Conéctese una vez para descargar.', true); return; }
+
+  const ops = bloques.map(b => `<option value="${b.id}">Bloque ${b.codigo}</option>`).join('');
+  $('regBloque').innerHTML = ops;
+  $('nhBloque').innerHTML = ops;
+  pintarLimiteNaves();
+  pintarTablaBloques();
+}
+function bloquePorId(id){ return bloques.find(b => b.id === Number(id)); }
+
+function pintarTablaBloques(){
+  const puedeGPS = esSupervisorOAdmin();
+  $('tablaBloques').innerHTML = bloques.map(b => `
+    <tr>
+      <td><b>${b.codigo}</b></td>
+      <td class="mono">${b.naves}</td>
+      <td class="mono">${Number(b.medias_naves) || '—'}</td>
+      <td>${b.lat ? '📍' : (puedeGPS ? `<button class="miniBtn" onclick="capturarGPS(${b.id})">Capturar</button>` : '—')}</td>
+    </tr>`).join('');
+}
+
+async function capturarGPS(bloqueId){
+  if(!posicion){ aviso('Aún no hay señal GPS.', true); return; }
+  if(!hayRed()){ aviso('Se requiere conexión para guardar la ubicación del bloque.', true); return; }
+  const b = bloquePorId(bloqueId);
+  if(!confirm(`¿Guardar su posición actual (±${Math.round(posicion.acc)} m) como ubicación del bloque ${b.codigo}?`)) return;
+  const { error } = await db.from('bloques').update({ lat: posicion.lat, lng: posicion.lng }).eq('id', bloqueId);
+  if(error){ aviso(error.message, true); return; }
+  aviso(`📍 Ubicación del bloque ${b.codigo} guardada.`);
+  await cargarBloques();
+  pintarPendientes();
+}
+
+function pintarLimiteNaves(){
+  const b = bloquePorId($('nhBloque').value);
+  if(!b) return;
+  $('nhLimite').textContent = `Este bloque tiene ${b.naves} naves` + (Number(b.medias_naves) ? ` + ${b.medias_naves} medias` : '') + `. Rango permitido: 1 a ${b.naves}.`;
+  $('nhDesde').max = b.naves; $('nhHasta').max = b.naves; $('nhHasta').value = b.naves;
+}
+
+/* ------------------------- registro de lecturas (offline-first) ------------------------- */
+async function cargarHorometrosBloque(){
+  const bloqueId = Number($('regBloque').value);
+  const b = bloquePorId(bloqueId);
+  if(!b) return;
+  $('infoBloque').textContent = `${b.naves} naves` + (Number(b.medias_naves) ? ` + ${b.medias_naves} medias naves` : '');
+  const fecha = $('regFecha').value || hoyISO();
+
+  // Horómetros: red o caché
+  let hs = [];
+  if(hayRed()){
+    const { data } = await db.from('horometros').select('*').eq('activo', true).order('nave_desde');
+    if(data){ lsSet('cacheHorometros', data); }
+  }
+  const todos = lsGet('cacheHorometros', []);
+  hs = todos.filter(h => h.bloque_id === bloqueId);
+  horometrosBloque = hs;
+
+  if(!hs.length){
+    $('listaHorometrosRegistro').innerHTML = '<div class="vacio">Este bloque no tiene horómetros activos (o falta descargar datos con conexión).</div>';
+    return;
+  }
+  const ids = hs.map(h => h.id);
+
+  // Últimas lecturas: red → refresca caché; sin red → caché
+  let ultimas = lsGet('cacheUltimas', {});   // {horometro_id: {fecha, valor}}
+  if(hayRed()){
+    const { data: prevs } = await db.from('lecturas')
+      .select('horometro_id, fecha, valor').in('horometro_id', ids)
+      .lt('fecha', fecha).order('fecha', { ascending:false });
+    (prevs||[]).forEach(l => {
+      if(!ultimas[l.horometro_id] || l.fecha > ultimas[l.horometro_id].fecha)
+        ultimas[l.horometro_id] = { fecha:l.fecha, valor:Number(l.valor) };
+    });
+    lsSet('cacheUltimas', ultimas);
+  }
+
+  // Registradas hoy: servidor + cola local
+  const registrada = {};
+  if(hayRed()){
+    const { data: deHoy } = await db.from('lecturas').select('*').in('horometro_id', ids).eq('fecha', fecha);
+    (deHoy||[]).forEach(l => registrada[l.horometro_id] = l);
+  }
+  const cola = lsGet('colaLecturas', []);
+  const enCola = {};
+  cola.filter(c => c.fecha === fecha && ids.includes(c.horometro_id)).forEach(c => enCola[c.horometro_id] = c);
+
+  $('listaHorometrosRegistro').innerHTML = hs.map(h => {
+    const prev = ultimas[h.id];
+    const reg = registrada[h.id];
+    const pend = enCola[h.id];
+    const cab = `
+      <div class="horoCab"><span class="horoNombre">${h.nombre}</span><span class="horoRango">naves ${h.nave_desde}–${h.nave_hasta}</span></div>
+      <div class="ultima">${prev ? `Última lectura (${prev.fecha}): <b class="mono">${prev.valor.toFixed(1)} h</b>` : 'Sin lecturas anteriores (primera lectura).'}</div>`;
+
+    if(reg){
+      const pct = reg.delta == null ? 100 : Math.min(100, (Number(reg.delta)/HORAS_ESPERADAS)*100);
+      return `<div class="horoItem">${cab}
+        <div class="yaRegistrada">✔ Registrado: <b class="mono">${Number(reg.valor).toFixed(1)} h</b>
+        ${reg.delta != null ? ` · Δ <b class="mono">${Number(reg.delta).toFixed(1)} h</b>` : ''}${reg.alerta ? ' · ⚠ ALERTA' : ''}</div>
+        <div class="barraLuz"><i class="${reg.alerta?'roja':''}" style="width:${pct}%"></i></div>
+        ${reg.observacion ? `<div class="alertaObs">${reg.observacion}</div>` : ''}</div>`;
+    }
+    if(pend){
+      return `<div class="horoItem">${cab}
+        <div class="enCola">⏳ Guardado en el dispositivo: <b class="mono">${Number(pend.valor).toFixed(1)} h</b> — se subirá al recuperar conexión.</div></div>`;
+    }
+    return `<div class="horoItem" id="horo-${h.id}">${cab}
+      <label for="val-${h.id}">Lectura de hoy (horas acumuladas)</label>
+      <input type="number" step="0.1" min="0" id="val-${h.id}" class="mono" placeholder="0.0"
+             oninput="previsualizarDelta(${h.id}, ${prev ? prev.valor : 'null'})">
+      <div class="deltaPrevio" id="delta-${h.id}"></div>
+      <div class="barraLuz"><i id="barra-${h.id}" style="width:0%"></i></div>
+      <div class="obsCampo" id="obsWrap-${h.id}">
+        <label for="obs-${h.id}">Observación (obligatoria por alerta)</label>
+        <textarea id="obs-${h.id}" rows="2" placeholder="ej. Corte de energía 8pm–2am, breaker disparado…"></textarea>
+      </div>
+      <button class="guardarMini" onclick="guardarLectura(${h.id})">Guardar lectura</button></div>`;
+  }).join('');
+}
+
+function previsualizarDelta(horoId, prevValor){
+  const v = parseFloat($('val-'+horoId).value);
+  const caja = $('delta-'+horoId), barra = $('barra-'+horoId), obs = $('obsWrap-'+horoId);
+  caja.className = 'deltaPrevio'; obs.classList.remove('visible'); barra.style.width='0%'; barra.className='';
+  if(isNaN(v) || prevValor === null) return;
+  const delta = v - prevValor;
+  if(delta < 0){ caja.classList.add('mal'); caja.textContent = 'La lectura es menor a la anterior. Verifique el valor.'; return; }
+  barra.style.width = Math.min(100, (delta/HORAS_ESPERADAS)*100) + '%';
+  if(delta < UMBRAL_HORAS){
+    caja.classList.add('mal');
+    caja.textContent = `⚠ Solo ${delta.toFixed(1)} h de luz desde la última lectura. Se generará ALERTA — escriba una observación.`;
+    barra.className = 'roja';
+    obs.classList.add('visible');
+  } else {
+    caja.classList.add('ok');
+    caja.textContent = `Δ ${delta.toFixed(1)} h de luz registradas. Correcto.`;
+  }
+}
+
+async function guardarLectura(horoId){
+  const fecha = $('regFecha').value;
+  const v = parseFloat($('val-'+horoId).value);
+  if(!fecha){ aviso('Seleccione la fecha.', true); return; }
+  if(isNaN(v) || v < 0){ aviso('Ingrese una lectura válida.', true); return; }
+
+  // Ventana laboral de registro: 6 a.m. – 2 p.m. (supervisor/admin pueden fuera de ella)
+  if(!dentroVentanaRegistro() && !esSupervisorOAdmin()){
+    aviso(`El registro de horómetros solo está permitido entre ${HORA_INICIO_REGISTRO}:00 a.m. y ${HORA_FIN_REGISTRO-12}:00 p.m. Contacte a su supervisor si necesita registrar fuera del horario.`, true);
+    return;
+  }
+
+  // Validación local (funciona también sin red)
+  const ultimas = lsGet('cacheUltimas', {});
+  const prev = ultimas[horoId];
+  const obsEl = $('obs-'+horoId);
+  const observacion = obsEl && obsEl.value.trim() ? obsEl.value.trim() : null;
+
+  if(prev){
+    if(v < prev.valor){ aviso(`La lectura (${v}) es menor a la anterior (${prev.valor}). El horómetro es acumulativo.`, true); return; }
+    const delta = v - prev.valor;
+    if(delta < UMBRAL_HORAS && !observacion){
+      $('obsWrap-'+horoId).classList.add('visible');
+      aviso('⚠ Alerta de menos de 2 h: debe escribir una observación antes de guardar.', true);
+      return;
+    }
+  }
+
+  const fila = { horometro_id: horoId, fecha, valor: v, observacion, usuario_id: perfil.id };
+
+  if(hayRed()){
+    const { error } = await db.from('lecturas').insert(fila);
+    if(error){
+      if(error.message.includes('observación') || error.message.includes('ALERTA')){
+        $('obsWrap-'+horoId).classList.add('visible');
+        aviso('⚠ Alerta: debe escribir una observación.', true);
+      } else aviso('Error: ' + error.message, true);
+      return;
+    }
+    aviso('Lectura guardada ✔');
+  } else {
+    const cola = lsGet('colaLecturas', []);
+    if(cola.some(c => c.horometro_id === horoId && c.fecha === fecha)){
+      aviso('Ya hay un registro en cola para este horómetro y fecha.', true); return;
+    }
+    cola.push(fila); lsSet('colaLecturas', cola);
+    aviso('⏳ Sin conexión: registro guardado en el dispositivo.');
+  }
+
+  // actualizar caché de última lectura y estado del día
+  ultimas[horoId] = { fecha, valor: v };
+  lsSet('cacheUltimas', ultimas);
+  const h = lsGet('cacheHorometros', []).find(x => x.id === horoId);
+  if(h) estadoDia.registrados.add(h.bloque_id);
+  registrarPosicion('lectura');
+  actualizarBanner();
+  await cargarHorometrosBloque();
+  pintarPendientes();
+}
+
+document.addEventListener('change', e => {
+  if(e.target && e.target.id === 'regFecha') cargarHorometrosBloque();
+});
+
+/* ------------------------- PENDIENTES del día ------------------------- */
+async function cargarEstadoDia(){
+  const fecha = hoyISO();
+  estadoDia = { registrados:new Set(), justificados:new Set() };
+
+  if(hayRed()){
+    const { data: ls } = await db.from('lecturas')
+      .select('horometro_id, horometros(bloque_id)').eq('fecha', fecha);
+    (ls||[]).forEach(l => { if(l.horometros) estadoDia.registrados.add(l.horometros.bloque_id); });
+    const { data: js } = await db.from('justificaciones_bloque').select('bloque_id').eq('fecha', fecha);
+    (js||[]).forEach(j => estadoDia.justificados.add(j.bloque_id));
+  }
+  // sumar lo que está en cola local
+  const horos = lsGet('cacheHorometros', []);
+  lsGet('colaLecturas', []).filter(c => c.fecha === fecha).forEach(c => {
+    const h = horos.find(x => x.id === c.horometro_id);
+    if(h) estadoDia.registrados.add(h.bloque_id);
+  });
+  lsGet('colaJustificaciones', []).filter(j => j.fecha === fecha).forEach(j => estadoDia.justificados.add(j.bloque_id));
+
+  pintarPendientes();
+}
+
+function bloquesPendientes(){
+  return bloques.filter(b => !estadoDia.registrados.has(b.id) && !estadoDia.justificados.has(b.id));
+}
+
+function pintarPendientes(){
+  if(!bloques.length) return;
+  const pend = bloquesPendientes();
+  const nReg = estadoDia.registrados.size, nJust = estadoDia.justificados.size;
+  $('kpiReg').textContent = nReg;
+  $('kpiPend').textContent = pend.length;
+  $('kpiJust').textContent = nJust;
+  const badge = $('numPend');
+  badge.style.display = pend.length ? 'flex' : 'none';
+  badge.textContent = pend.length;
+
+  if(!pend.length){
+    $('listaPendientes').innerHTML = '<div class="vacio">🌼 Todos los bloques del día están registrados o justificados.</div>';
+    $('etaTotal').textContent = '';
+    return;
+  }
+
+  // Ordenar por distancia si hay GPS y coordenadas
+  let lista = pend.map(b => {
+    let distKm = null, etaMin = null;
+    if(posicion && b.lat != null && b.lng != null){
+      distKm = distanciaKm(posicion.lat, posicion.lng, b.lat, b.lng);
+      etaMin = (distKm / VEL_CAMINATA_KMH) * 60 + MIN_POR_BLOQUE;
+    }
+    return { b, distKm, etaMin };
+  });
+  lista.sort((x,y) => (x.distKm ?? 1e9) - (y.distKm ?? 1e9));
+
+  const conEta = lista.filter(x => x.etaMin != null);
+  if(conEta.length){
+    const total = conEta.reduce((s,x) => s + x.etaMin, 0);
+    $('etaTotal').textContent = ` · recorrido estimado ≈ ${Math.round(total)} min`;
+  } else {
+    $('etaTotal').textContent = '';
+  }
+
+  $('listaPendientes').innerHTML = lista.map(({b, distKm, etaMin}) => `
+    <div class="pendItem">
+      <div class="pendCab">
+        <div>
+          <div class="pendBloque">Bloque ${b.codigo}</div>
+          <div style="font-size:12px;color:var(--texto2)">${b.naves} naves${Number(b.medias_naves)?` + ${b.medias_naves} medias`:''}</div>
+        </div>
+        <div class="pendEta">${etaMin != null
+          ? `<b>≈ ${Math.round(etaMin)} min</b><br>${(distKm*1000).toFixed(0)} m caminando`
+          : (b.lat ? 'Esperando GPS…' : 'Bloque sin ubicación GPS')}</div>
+      </div>
+      <div style="display:flex;gap:8px">
+        <button class="btnJust" onclick="irARegistroBloque(${b.id})">✎ Registrar ahora</button>
+        <button class="btnJust" onclick="justificarBloque(${b.id}, '${b.codigo}')">Justificar no recorrido</button>
+      </div>
+    </div>`).join('');
+}
+
+function irARegistroBloque(bloqueId){
+  $('regBloque').value = bloqueId;
+  cargarHorometrosBloque();
+  irA('registro', document.querySelector('nav button'));
+}
+
+async function justificarBloque(bloqueId, codigo){
+  const motivo = prompt(`¿Por qué NO se recorrió/registró el bloque ${codigo} hoy?\n(ej. bloque en mantenimiento, sin fotoperiodo activo, acceso cerrado…)`);
+  if(motivo === null) return;
+  if(!motivo.trim()){ aviso('Debe escribir el motivo.', true); return; }
+
+  const fila = { bloque_id: bloqueId, fecha: hoyISO(), motivo: motivo.trim(), usuario_id: perfil.id };
+  if(hayRed()){
+    const { error } = await db.from('justificaciones_bloque').insert(fila);
+    if(error){ aviso(error.message, true); return; }
+    aviso(`Justificación del bloque ${codigo} guardada.`);
+  } else {
+    const cola = lsGet('colaJustificaciones', []);
+    cola.push(fila); lsSet('colaJustificaciones', cola);
+    aviso('⏳ Sin conexión: justificación guardada en el dispositivo.');
+  }
+  estadoDia.justificados.add(bloqueId);
+  registrarPosicion('justificacion');
+  actualizarBanner();
+  pintarPendientes();
+}
+
+/* ------------------------- Notificaciones de pendientes ------------------------- */
+function pedirPermisoNotificaciones(){
+  if('Notification' in window && Notification.permission === 'default'){
+    Notification.requestPermission();
+  }
+}
+function revisarNotificacionPendientes(){
+  const pend = bloquesPendientes();
+  if(!pend.length) return;
+  const hora = horaBogota();
+  if(hora < HORA_AVISO_PENDIENTES) return;
+  const clave = 'notif-' + hoyISO();
+  if(sessionStorage.getItem(clave)) return;
+  sessionStorage.setItem(clave, '1');
+  const cuerpo = `Son más de la 1:00 p.m. y hay bloques sin registrar: ${pend.slice(0,8).map(b=>b.codigo).join(', ')}${pend.length>8?'…':''}. Registre la lectura antes de las 2:00 p.m. o justifique por qué no se recorrió.`;
+  if('Notification' in window && Notification.permission === 'granted'){
+    new Notification('⚠ Horómetros pendientes', { body: cuerpo });
+  }
+  aviso('⚠ ' + cuerpo, true);
+}
+
+/* ------------------------- alertas ------------------------- */
+async function cargarAlertas(){
+  if(!hayRed()) return;
+  const desde = $('alDesde').value, hasta = $('alHasta').value;
+  let q = db.from('lecturas')
+    .select('*, horometros(nombre, nave_desde, nave_hasta, bloques(codigo)), perfiles:usuario_id(nombre)')
+    .eq('alerta', true).order('fecha', { ascending:false }).limit(200);
+  if(desde) q = q.gte('fecha', desde);
+  if(hasta) q = q.lte('fecha', hasta);
+  const { data, error } = await q;
+  if(error){ aviso(error.message, true); return; }
+  const n = (data||[]).length;
+  const badge = $('numAlertas');
+  badge.style.display = n ? 'flex' : 'none';
+  badge.textContent = n;
+  $('listaAlertas').innerHTML = n ? data.map(a => `
+    <div class="alertaItem">
+      <div class="alertaCab">
+        <span>Bloque <b>${a.horometros?.bloques?.codigo ?? '?'}</b> · ${a.horometros?.nombre ?? ''} (naves ${a.horometros?.nave_desde}–${a.horometros?.nave_hasta})</span>
+        <span class="mono">${a.fecha}</span>
+      </div>
+      <div class="alertaDelta mono">${Number(a.delta).toFixed(1)} h</div>
+      <div style="font-size:12px;color:var(--texto2)">Lectura: <span class="mono">${Number(a.valor).toFixed(1)} h</span> · Registró: ${a.perfiles?.nombre ?? '—'}</div>
+      <div class="alertaObs">📝 ${a.observacion ?? 'Sin observación'}</div>
+    </div>`).join('')
+    : '<div class="vacio">Sin alertas en el rango seleccionado. 🌼</div>';
+}
+
+/* ------------------------- gestión de horómetros ------------------------- */
+async function crearHorometro(){
+  if(!hayRed()){ aviso('Se requiere conexión para crear horómetros.', true); return; }
+  const bloqueId = Number($('nhBloque').value);
+  const b = bloquePorId(bloqueId);
+  const nombre = $('nhNombre').value.trim();
+  const desde = parseInt($('nhDesde').value), hasta = parseInt($('nhHasta').value);
+  if(!nombre){ aviso('Escriba un nombre para el horómetro.', true); return; }
+  if(isNaN(desde) || isNaN(hasta) || desde < 1 || hasta < desde){ aviso('Rango de naves inválido.', true); return; }
+  if(hasta > b.naves){ aviso(`El bloque ${b.codigo} solo tiene ${b.naves} naves.`, true); return; }
+  const { error } = await db.from('horometros').insert({
+    bloque_id: bloqueId, nombre, nave_desde: desde, nave_hasta: hasta, created_by: perfil.id
+  });
+  if(error){ aviso('Error: ' + error.message, true); return; }
+  aviso(`Horómetro ${nombre} creado en bloque ${b.codigo} ✔`);
+  $('nhNombre').value = '';
+  await cargarListaHorometros();
+  await cargarHorometrosBloque();
+}
+
+async function cargarListaHorometros(){
+  const { data, error } = await db.from('horometros')
+    .select('*, bloques(codigo, naves)').eq('activo', true).order('bloque_id').order('nave_desde');
+  if(error){ aviso(error.message, true); return; }
+  lsSet('cacheHorometros', data.map(({bloques:_, ...h}) => h));
+  pintarGrupoHoros(data.map(h => ({...h, _codigo: h.bloques?.codigo, _naves: h.bloques?.naves})));
+}
+function pintarListaHorometrosDesdeCache(){
+  const hs = lsGet('cacheHorometros', []);
+  pintarGrupoHoros(hs.map(h => {
+    const b = bloquePorId(h.bloque_id);
+    return {...h, _codigo: b?.codigo ?? '?', _naves: b?.naves ?? '?'};
+  }));
+}
+function pintarGrupoHoros(data){
+  if(!data.length){ $('listaHorometros').innerHTML = '<div class="vacio">Sin horómetros.</div>'; return; }
+  const porBloque = {};
+  data.forEach(h => { (porBloque[h._codigo] = porBloque[h._codigo] || []).push(h); });
+  $('listaHorometros').innerHTML = Object.entries(porBloque).map(([cod, hs]) => `
+    <div class="tarjeta" style="padding:12px 14px">
+      <div style="font-weight:700;margin-bottom:6px">Bloque ${cod} <span style="color:var(--texto2);font-weight:400;font-size:12px">(${hs[0]._naves} naves)</span></div>
+      ${hs.map(h => `<div style="display:flex;justify-content:space-between;font-size:13px;padding:5px 0;border-top:1px solid var(--borde)">
+        <span>${h.nombre}</span><span class="mono" style="color:var(--texto2)">naves ${h.nave_desde}–${h.nave_hasta}</span>
+      </div>`).join('')}
+    </div>`).join('');
+}
+
+/* ------------------------- navegación ------------------------- */
+function irA(sec, btn){
+  document.querySelectorAll('.seccion').forEach(s => s.classList.remove('activa'));
+  document.querySelectorAll('nav button').forEach(b => b.classList.remove('activo'));
+  $('sec-'+sec).classList.add('activa');
+  btn.classList.add('activo');
+  if(sec === 'pendientes') cargarEstadoDia();
+}
+
+/* ------------------------- arranque ------------------------- */
+aplicarTema(lsGet('tema', 'noche'));
+if('serviceWorker' in navigator){
+  navigator.serviceWorker.register('sw.js').catch(()=>{});
+}
+(async () => {
+  const { data: { session } } = await db.auth.getSession().catch(() => ({data:{session:null}}));
+  if(session || (!hayRed() && lsGet('perfilCache', null))) await arrancarApp();
+  else mostrarLoginOffline();
+})();
+$('loginPass').addEventListener('keydown', e => { if(e.key === 'Enter') iniciarSesion(); });
+</script>
+</body>
+</html>

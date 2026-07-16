@@ -1,0 +1,14 @@
+{
+  "name": "Horómetros Fotoperiodo",
+  "short_name": "Horómetros",
+  "description": "Registro y validación de horómetros de guirnaldas por bloque — Flores El Trigal",
+  "start_url": "./index.html",
+  "display": "standalone",
+  "background_color": "#0c1210",
+  "theme_color": "#0c1210",
+  "lang": "es",
+  "icons": [
+    { "src": "icono-192.png", "sizes": "192x192", "type": "image/png" },
+    { "src": "icono-512.png", "sizes": "512x512", "type": "image/png" }
+  ]
+}
