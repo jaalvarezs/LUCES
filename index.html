@@ -120,6 +120,9 @@
   .gpsChip{font-size:11px;color:var(--texto2)}
   .gpsChip.on{color:var(--verde)}
   .miniBtn{background:var(--panel2);border:1px solid var(--borde);color:var(--texto);border-radius:8px;padding:6px 10px;font-family:inherit;font-size:12px;cursor:pointer}
+  /* Rol consulta: solo visualización, sin botones de acción */
+  body.rolConsulta .guardarMini, body.rolConsulta .btnJust, body.rolConsulta .miniBtn,
+  body.rolConsulta #sec-registro input[type=number], body.rolConsulta #sec-registro textarea{display:none}
 </style>
 </head>
 <body>
@@ -188,13 +191,17 @@
         <div><label for="alHasta">Hasta</label><input type="date" id="alHasta" onchange="cargarAlertas()"></div>
       </div>
       <div class="fila" style="margin-top:4px">
-        <div><label for="alBloque">Bloque</label><select id="alBloque" onchange="cargarAlertas()"></select></div>
+        <div><label for="alBloque">Bloque</label><select id="alBloque" onchange="poblarFiltroHorometro();cargarAlertas()"></select></div>
+        <div><label for="alHorometro">Horómetro</label><select id="alHorometro" onchange="cargarAlertas()"><option value="">Todos</option></select></div>
+      </div>
+      <div class="fila" style="margin-top:4px">
         <div><label for="alFiltro">Mostrar</label>
           <select id="alFiltro" onchange="cargarAlertas()">
             <option value="todas">Todas las lecturas</option>
             <option value="alertas">Solo alertas (&lt; 2 h)</option>
           </select>
         </div>
+        <div style="display:flex;align-items:flex-end"><button class="btn" style="margin-top:0" onclick="exportarCSV()">⬇ Exportar CSV</button></div>
       </div>
     </div>
     <div class="resumenDia">
@@ -406,6 +413,9 @@ async function arrancarApp(){
   $('usuarioRol').textContent = perfil.rol + (hayRed() ? '' : ' · offline');
   if(esSupervisorOAdmin()) $('formNuevoHoro').style.display = 'block';
   if(esSupervisorOAdmin()) $('formNuevoBloque').style.display = 'block';
+  if(perfil.rol === 'consulta'){
+    document.body.classList.add('rolConsulta');
+  }
 
   $('regFecha').value = hoyISO();
   $('recFecha').value = hoyISO();
@@ -727,6 +737,8 @@ function previsualizarDelta(horoId, prevValor){
 }
 
 async function guardarLectura(horoId){
+  if(perfil && perfil.rol === 'consulta'){ aviso('Usuario de solo consulta: no puede realizar registros.', true); return; }
+
   const fecha = $('regFecha').value;
   const v = parseFloat($('val-'+horoId).value);
   if(!fecha){ aviso('Seleccione la fecha.', true); return; }
@@ -883,6 +895,8 @@ function irARegistroBloque(bloqueId){
 }
 
 async function justificarBloque(bloqueId, codigo){
+  if(perfil && perfil.rol === 'consulta'){ aviso('Usuario de solo consulta: no puede realizar registros.', true); return; }
+
   const motivo = prompt(`¿Por qué NO se recorrió/registró el bloque ${codigo} hoy?\n(ej. bloque en mantenimiento, sin fotoperiodo activo, acceso cerrado…)`);
   if(motivo === null) return;
   if(!motivo.trim()){ aviso('Debe escribir el motivo.', true); return; }
@@ -925,6 +939,17 @@ function revisarNotificacionPendientes(){
 }
 
 /* ------------------------- dashboard de lecturas ------------------------- */
+let ultimaConsulta = [];   // datos de la última consulta del dashboard (para exportar)
+
+function poblarFiltroHorometro(){
+  const bloqueId = Number($('alBloque').value);
+  const sel = $('alHorometro');
+  if(!bloqueId){ sel.innerHTML = '<option value="">Todos</option>'; return; }
+  const hs = lsGet('cacheHorometros', []).filter(h => h.bloque_id === bloqueId);
+  sel.innerHTML = '<option value="">Todos</option>' +
+    hs.map(h => `<option value="${h.id}">${h.nombre} (naves ${h.nave_desde}–${h.nave_hasta})</option>`).join('');
+}
+
 async function cargarAlertas(){
   if(!hayRed()){
     $('listaAlertas').innerHTML = '<div class="vacio">El historial de lecturas requiere conexión.</div>';
@@ -932,6 +957,7 @@ async function cargarAlertas(){
   }
   const desde = $('alDesde').value, hasta = $('alHasta').value;
   const bloqueId = $('alBloque').value;          // '' = todos
+  const horoId = $('alHorometro').value;         // '' = todos
   const soloAlertas = $('alFiltro').value === 'alertas';
 
   let q = db.from('lecturas')
@@ -940,10 +966,12 @@ async function cargarAlertas(){
   if(desde) q = q.gte('fecha', desde);
   if(hasta) q = q.lte('fecha', hasta);
   if(soloAlertas) q = q.eq('alerta', true);
-  if(bloqueId) q = q.eq('horometros.bloque_id', Number(bloqueId));
+  if(horoId) q = q.eq('horometro_id', Number(horoId));
+  else if(bloqueId) q = q.eq('horometros.bloque_id', Number(bloqueId));
 
   const { data, error } = await q;
   if(error){ aviso(error.message, true); return; }
+  ultimaConsulta = data || [];
 
   const total = (data||[]).length;
   const nAlertas = (data||[]).filter(l => l.alerta).length;
@@ -1076,6 +1104,8 @@ async function editarRangoHorometro(id){
 }
 
 async function toggleHorometro(id, activo, nombre, codBloque){
+  if(perfil && perfil.rol === 'consulta'){ aviso('Usuario de solo consulta: no puede realizar registros.', true); return; }
+
   if(!hayRed()){ aviso('Se requiere conexión para pausar o reactivar horómetros.', true); return; }
   const msg = activo
     ? `¿Parar el horómetro ${nombre} del bloque ${codBloque}?\n\nÚsese cuando el bloque sale de luces (fin de fotoperiodo). No se exigirá registro diario ni aparecerá en pendientes. Las lecturas históricas se conservan.`
@@ -1087,6 +1117,32 @@ async function toggleHorometro(id, activo, nombre, codBloque){
   await cargarListaHorometros();
   await cargarHorometrosBloque();
   await cargarEstadoDia();
+}
+
+function exportarCSV(){
+  if(!ultimaConsulta.length){ aviso('No hay datos para exportar. Ajuste los filtros y espere a que carguen las lecturas.', true); return; }
+  const enc = ['Fecha','Bloque','Horometro','Naves','Lectura (h)','Delta (h)','Alerta','Observacion','Registro'];
+  const esc = v => '"' + String(v ?? '').replace(/"/g, '""') + '"';
+  const filas = ultimaConsulta.map(l => [
+    l.fecha,
+    l.horometros?.bloques?.codigo ?? '',
+    l.horometros?.nombre ?? '',
+    `${l.horometros?.nave_desde ?? ''}-${l.horometros?.nave_hasta ?? ''}`,
+    String(Number(l.valor).toFixed(1)).replace('.', ','),
+    l.delta != null ? String(Number(l.delta).toFixed(1)).replace('.', ',') : '',
+    l.alerta ? 'SI' : 'NO',
+    l.observacion ?? '',
+    l.perfiles?.nombre ?? ''
+  ].map(esc).join(';'));
+  const csv = '\uFEFF' + enc.join(';') + '\n' + filas.join('\n');   // BOM para tildes en Excel
+  const blob = new Blob([csv], { type: 'text/csv;charset=utf-8' });
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(blob);
+  const d = $('alDesde').value || 'inicio', h = $('alHasta').value || 'hoy';
+  a.download = `lecturas_horometros_${d}_a_${h}.csv`;
+  a.click();
+  URL.revokeObjectURL(a.href);
+  aviso(`⬇ ${ultimaConsulta.length} registros exportados a CSV.`);
 }
 
 /* ------------------------- mapa de recorrido ------------------------- */
