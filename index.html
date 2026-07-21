@@ -988,7 +988,7 @@ async function cargarAlertas(){
   const soloAlertas = $('alFiltro').value === 'alertas';
 
   let q = db.from('lecturas')
-    .select('*, horometros(nombre, nave_desde, nave_hasta, bloque_id, bloques(codigo)), perfiles:usuario_id(nombre)')
+    .select('*, horometros(nombre, nave_desde, nave_hasta, bloque_id, bloques(codigo))')
     .order('fecha', { ascending:false }).order('horometro_id').limit(500);
   if(desde) q = q.gte('fecha', desde);
   if(hasta) q = q.lte('fecha', hasta);
@@ -1009,6 +1009,15 @@ async function cargarAlertas(){
 
   const { data, error } = await q;
   if(error){ aviso(error.message, true); return; }
+
+  // lecturas.usuario_id no tiene relación directa con perfiles para PostgREST
+  // (ambas apuntan a la tabla interna de autenticación, no entre sí), así que
+  // los nombres de quien registró se resuelven aparte y se unen aquí.
+  const { data: perfilesAll } = await db.from('perfiles').select('id, nombre');
+  const nombrePorId = {};
+  (perfilesAll || []).forEach(p => { nombrePorId[p.id] = p.nombre; });
+  (data || []).forEach(l => { l.perfiles = { nombre: nombrePorId[l.usuario_id] || '—' }; });
+
   ultimaConsulta = data || [];
 
   const total = (data||[]).length;
