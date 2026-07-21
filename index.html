@@ -988,13 +988,24 @@ async function cargarAlertas(){
   const soloAlertas = $('alFiltro').value === 'alertas';
 
   let q = db.from('lecturas')
-    .select('*, horometros!inner(nombre, nave_desde, nave_hasta, bloque_id, bloques(codigo)), perfiles:usuario_id(nombre)')
+    .select('*, horometros(nombre, nave_desde, nave_hasta, bloque_id, bloques(codigo)), perfiles:usuario_id(nombre)')
     .order('fecha', { ascending:false }).order('horometro_id').limit(500);
   if(desde) q = q.gte('fecha', desde);
   if(hasta) q = q.lte('fecha', hasta);
   if(soloAlertas) q = q.eq('alerta', true);
-  if(horoId) q = q.eq('horometro_id', Number(horoId));
-  else if(bloqueId) q = q.eq('horometros.bloque_id', Number(bloqueId));
+
+  if(horoId){
+    q = q.eq('horometro_id', Number(horoId));
+  } else if(bloqueId){
+    // Se filtra por lista de IDs de horómetro (no por el embed) para evitar
+    // el join !inner anidado, que en algunos casos devuelve 0 filas sin error.
+    let idsBloque = lsGet('cacheTodosHorometros', []).filter(h => h.bloque_id === Number(bloqueId)).map(h => h.id);
+    if(!idsBloque.length){
+      const { data: hs } = await db.from('horometros').select('id').eq('bloque_id', Number(bloqueId));
+      idsBloque = (hs||[]).map(h => h.id);
+    }
+    q = idsBloque.length ? q.in('horometro_id', idsBloque) : q.eq('horometro_id', -1); // sin horómetros → sin resultados
+  }
 
   const { data, error } = await q;
   if(error){ aviso(error.message, true); return; }
