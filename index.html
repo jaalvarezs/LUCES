@@ -120,9 +120,11 @@
   .gpsChip{font-size:11px;color:var(--texto2)}
   .gpsChip.on{color:var(--verde)}
   .miniBtn{background:var(--panel2);border:1px solid var(--borde);color:var(--texto);border-radius:8px;padding:6px 10px;font-family:inherit;font-size:12px;cursor:pointer}
-  /* Rol consulta: solo visualización, sin botones de acción */
+  .chip{background:var(--panel2);border:1px solid var(--borde);color:var(--texto2);border-radius:999px;padding:6px 14px;font-family:inherit;font-size:12px;font-weight:600;cursor:pointer}
+  /* Rol consulta: solo visualización, sin botones de acción (los .chip de filtro SÍ quedan visibles) */
   body.rolConsulta .guardarMini, body.rolConsulta .btnJust, body.rolConsulta .miniBtn,
   body.rolConsulta #sec-registro input[type=number], body.rolConsulta #sec-registro textarea{display:none}
+  body.rolConsulta .navRestringido{display:none}
 </style>
 </head>
 <body>
@@ -189,6 +191,12 @@
       <div class="fila">
         <div><label for="alDesde">Desde</label><input type="date" id="alDesde" onchange="cargarAlertas()"></div>
         <div><label for="alHasta">Hasta</label><input type="date" id="alHasta" onchange="cargarAlertas()"></div>
+      </div>
+      <div style="display:flex;gap:6px;margin-top:8px;flex-wrap:wrap">
+        <button class="chip" onclick="rangoRapido('hoy')">Hoy</button>
+        <button class="chip" onclick="rangoRapido('7')">7 días</button>
+        <button class="chip" onclick="rangoRapido('30')">30 días</button>
+        <button class="chip" onclick="rangoRapido('todo')">Todo el historial</button>
       </div>
       <div class="fila" style="margin-top:4px">
         <div><label for="alBloque">Bloque</label><select id="alBloque" onchange="poblarFiltroHorometro();cargarAlertas()"></select></div>
@@ -263,11 +271,11 @@
   </section>
 
   <nav>
-    <button class="activo" onclick="irA('registro',this)"><span class="ico">✎</span>Registro</button>
-    <button onclick="irA('pendientes',this)"><span class="ico">🚶</span>Pendientes<span class="badgeNum" id="numPend"></span></button>
-    <button onclick="irA('alertas',this)"><span class="ico">📊</span>Lecturas<span class="badgeNum" id="numAlertas"></span></button>
-    <button onclick="irA('horometros',this)"><span class="ico">⏱</span>Horóm.</button>
-    <button onclick="irA('bloques',this)"><span class="ico">▦</span>Bloques</button>
+    <button class="activo navRestringido" onclick="irA('registro',this)"><span class="ico">✎</span>Registro</button>
+    <button class="navRestringido" onclick="irA('pendientes',this)"><span class="ico">🚶</span>Pendientes<span class="badgeNum" id="numPend"></span></button>
+    <button class="navLecturas" onclick="irA('alertas',this)"><span class="ico">📊</span>Lecturas<span class="badgeNum" id="numAlertas"></span></button>
+    <button class="navRestringido" onclick="irA('horometros',this)"><span class="ico">⏱</span>Horóm.</button>
+    <button class="navRestringido" onclick="irA('bloques',this)"><span class="ico">▦</span>Bloques</button>
   </nav>
 </div>
 
@@ -415,13 +423,17 @@ async function arrancarApp(){
   if(esSupervisorOAdmin()) $('formNuevoBloque').style.display = 'block';
   if(perfil.rol === 'consulta'){
     document.body.classList.add('rolConsulta');
+    // Único acceso permitido: pestaña Lecturas (ver registros, alertas y exportar CSV)
+    document.querySelectorAll('.seccion').forEach(s => s.classList.remove('activa'));
+    $('sec-alertas').classList.add('activa');
+    document.querySelectorAll('nav button').forEach(b => b.classList.remove('activo'));
+    document.querySelector('nav .navLecturas')?.classList.add('activo');
   }
 
   $('regFecha').value = hoyISO();
   $('recFecha').value = hoyISO();
-  const d7 = new Date(); d7.setDate(d7.getDate()-7);
-  $('alDesde').value = d7.toLocaleDateString('sv-SE',{timeZone:'America/Bogota'});
-  $('alHasta').value = hoyISO();
+  // Lecturas: por defecto se ve TODO el historial (sin filtro de fecha);
+  // los chips Hoy/7 días/30 días/Todo permiten acotar cuando la lista crezca.
 
   actualizarBanner();
   iniciarGPS();
@@ -950,6 +962,20 @@ function poblarFiltroHorometro(){
     hs.map(h => `<option value="${h.id}">${h.nombre} (naves ${h.nave_desde}–${h.nave_hasta})</option>`).join('');
 }
 
+function rangoRapido(tipo){
+  const hoy = hoyISO();
+  if(tipo === 'hoy'){
+    $('alDesde').value = hoy; $('alHasta').value = hoy;
+  } else if(tipo === '7' || tipo === '30'){
+    const d = new Date(); d.setDate(d.getDate() - Number(tipo));
+    $('alDesde').value = d.toLocaleDateString('sv-SE', {timeZone:'America/Bogota'});
+    $('alHasta').value = hoy;
+  } else {
+    $('alDesde').value = ''; $('alHasta').value = '';   // todo el historial
+  }
+  cargarAlertas();
+}
+
 async function cargarAlertas(){
   if(!hayRed()){
     $('listaAlertas').innerHTML = '<div class="vacio">El historial de lecturas requiere conexión.</div>';
@@ -1037,11 +1063,13 @@ async function cargarListaHorometros(){
   if(error){ aviso(error.message, true); return; }
   // La caché de trabajo (registro, pendientes) solo lleva los activos
   lsSet('cacheHorometros', data.filter(h => h.activo).map(({bloques:_, ...h}) => h));
+  // Caché completa (activos + pausados) para poder editar cualquiera de los dos
+  lsSet('cacheTodosHorometros', data.map(({bloques:_, ...h}) => h));
   refrescarSelectorRegistro();
   pintarGrupoHoros(data.map(h => ({...h, _codigo: h.bloques?.codigo, _naves: h.bloques?.naves})));
 }
 function pintarListaHorometrosDesdeCache(){
-  const hs = lsGet('cacheHorometros', []);
+  const hs = lsGet('cacheTodosHorometros', null) || lsGet('cacheHorometros', []);
   pintarGrupoHoros(hs.map(h => {
     const b = bloquePorId(h.bloque_id);
     return {...h, _codigo: b?.codigo ?? '?', _naves: b?.naves ?? '?'};
@@ -1063,7 +1091,7 @@ function pintarGrupoHoros(data){
         <span>${h.nombre}${h.activo ? '' : ' <span style="color:var(--ambar);font-size:11px">⏸ pausado</span>'}</span>
         <span style="display:flex;align-items:center;gap:8px">
           <span class="mono" style="color:var(--texto2)">naves ${h.nave_desde}–${h.nave_hasta}</span>
-          ${editaRangos ? `<button class="miniBtn" onclick="editarRangoHorometro(${h.id})">✎</button>` : ''}
+          ${editaRangos ? `<button class="miniBtn" title="Editar nombre y rango" onclick="editarHorometro(${h.id})">✎</button>` : ''}
           ${online ? `<button class="miniBtn" onclick="toggleHorometro(${h.id}, ${h.activo}, '${h.nombre}', '${cod}')">${h.activo ? '⏸' : '▶'}</button>` : ''}
         </span>
       </div>`).join('')}
@@ -1076,13 +1104,18 @@ function rangoSolapa(bloqueId, desde, hasta, excluirId){
   return otros.find(h => h.nave_desde <= hasta && desde <= h.nave_hasta) || null;
 }
 
-async function editarRangoHorometro(id){
-  if(!hayRed()){ aviso('Se requiere conexión para editar rangos.', true); return; }
-  const h = lsGet('cacheHorometros', []).find(x => x.id === id);
+async function editarHorometro(id){
+  if(!hayRed()){ aviso('Se requiere conexión para editar horómetros.', true); return; }
+  const h = lsGet('cacheTodosHorometros', []).find(x => x.id === id);
   if(!h){ aviso('Horómetro no encontrado en caché. Recargue la app.', true); return; }
   const b = bloquePorId(h.bloque_id);
 
-  const dTxt = prompt(`Horómetro ${h.nombre} (bloque ${b.codigo}, ${b.naves} naves)\nNave DESDE (actual: ${h.nave_desde}):`, h.nave_desde);
+  const nombreTxt = prompt(`Bloque ${b.codigo} — nombre del horómetro (actual: ${h.nombre}):`, h.nombre);
+  if(nombreTxt === null) return;
+  const nombre = nombreTxt.trim();
+  if(!nombre){ aviso('El nombre no puede quedar vacío.', true); return; }
+
+  const dTxt = prompt(`Nave DESDE (actual: ${h.nave_desde}):`, h.nave_desde);
   if(dTxt === null) return;
   const hTxt = prompt(`Nave HASTA (actual: ${h.nave_hasta}, máximo ${b.naves}):`, h.nave_hasta);
   if(hTxt === null) return;
@@ -1090,15 +1123,25 @@ async function editarRangoHorometro(id){
 
   if(isNaN(desde) || isNaN(hasta) || desde < 1 || hasta < desde){ aviso('Rango inválido.', true); return; }
   if(hasta > b.naves){ aviso(`El bloque ${b.codigo} solo tiene ${b.naves} naves.`, true); return; }
-  const choque = rangoSolapa(h.bloque_id, desde, hasta, id);
-  if(choque){
-    aviso(`El rango ${desde}–${hasta} se solapa con ${choque.nombre} (naves ${choque.nave_desde}–${choque.nave_hasta}). Ajuste primero ese horómetro.`, true);
-    return;
+  // El solapamiento solo se valida contra horómetros activos (igual que en el servidor)
+  if(h.activo){
+    const choque = rangoSolapa(h.bloque_id, desde, hasta, id);
+    if(choque){
+      aviso(`El rango ${desde}–${hasta} se solapa con ${choque.nombre} (naves ${choque.nave_desde}–${choque.nave_hasta}). Ajuste primero ese horómetro.`, true);
+      return;
+    }
   }
 
-  const { error } = await db.from('horometros').update({ nave_desde: desde, nave_hasta: hasta }).eq('id', id);
-  if(error){ aviso('Error: ' + error.message, true); return; }
-  aviso(`${h.nombre} (bloque ${b.codigo}) ahora cubre naves ${desde}–${hasta} ✔`);
+  const { error } = await db.from('horometros').update({ nombre, nave_desde: desde, nave_hasta: hasta }).eq('id', id);
+  if(error){
+    if(error.message.toLowerCase().includes('unique') || error.message.includes('horometro_unico_por_bloque')){
+      aviso(`Ya existe un horómetro llamado "${nombre}" en el bloque ${b.codigo}. Elija otro nombre.`, true);
+    } else {
+      aviso('Error: ' + error.message, true);
+    }
+    return;
+  }
+  aviso(`Horómetro actualizado: "${nombre}" (bloque ${b.codigo}, naves ${desde}–${hasta}) ✔`);
   await cargarListaHorometros();
   await cargarHorometrosBloque();
 }
@@ -1149,7 +1192,7 @@ function exportarCSV(){
 async function poblarSelectorOperarios(){
   const sel = $('recUsuario');
   sel.innerHTML = `<option value="${perfil.id}">${perfil.nombre} (yo)</option>`;
-  if(esSupervisorOAdmin() && hayRed()){
+  if((esSupervisorOAdmin() || perfil.rol === 'consulta') && hayRed()){
     const { data } = await db.from('perfiles').select('id, nombre').eq('activo', true).order('nombre');
     if(data && data.length > 1){
       sel.innerHTML = data.map(p => `<option value="${p.id}" ${p.id===perfil.id?'selected':''}>${p.nombre}</option>`).join('');
