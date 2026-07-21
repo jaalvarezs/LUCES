@@ -197,6 +197,7 @@
         <button class="chip" onclick="rangoRapido('7')">7 días</button>
         <button class="chip" onclick="rangoRapido('30')">30 días</button>
         <button class="chip" onclick="rangoRapido('todo')">Todo el historial</button>
+        <button class="chip" onclick="cargarAlertas()" title="Volver a consultar con los filtros actuales">↻ Actualizar</button>
       </div>
       <div class="fila" style="margin-top:4px">
         <div><label for="alBloque">Bloque</label><select id="alBloque" onchange="poblarFiltroHorometro();cargarAlertas()"></select></div>
@@ -1303,6 +1304,7 @@ function irA(sec, btn){
   $('sec-'+sec).classList.add('activa');
   btn.classList.add('activo');
   if(sec === 'pendientes') cargarEstadoDia();
+  if(sec === 'alertas') cargarAlertas();
 }
 
 /* ------------------------- arranque ------------------------- */
