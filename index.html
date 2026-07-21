@@ -121,6 +121,7 @@
   .gpsChip.on{color:var(--verde)}
   .miniBtn{background:var(--panel2);border:1px solid var(--borde);color:var(--texto);border-radius:8px;padding:6px 10px;font-family:inherit;font-size:12px;cursor:pointer}
   .chip{background:var(--panel2);border:1px solid var(--borde);color:var(--texto2);border-radius:999px;padding:6px 14px;font-family:inherit;font-size:12px;font-weight:600;cursor:pointer}
+  .chip.activoChip{background:var(--ambar-suave);border-color:var(--ambar);color:var(--ambar)}
   /* Rol consulta: solo visualización, sin botones de acción (los .chip de filtro SÍ quedan visibles) */
   body.rolConsulta .guardarMini, body.rolConsulta .btnJust, body.rolConsulta .miniBtn,
   body.rolConsulta #sec-registro input[type=number], body.rolConsulta #sec-registro textarea{display:none}
@@ -164,14 +165,49 @@
 
   <!-- REGISTRO -->
   <section class="seccion activa" id="sec-registro">
-    <div class="tarjeta">
-      <div class="fila">
-        <div><label for="regFecha">Fecha</label><input type="date" id="regFecha"></div>
-        <div><label for="regBloque">Bloque</label><select id="regBloque" onchange="cargarHorometrosBloque()"></select></div>
-      </div>
-      <div id="infoBloque" style="font-size:12px;color:var(--texto2);margin-top:8px"></div>
+    <div style="display:flex;gap:6px;margin-bottom:10px">
+      <button class="chip activoChip" id="tabRegHoro" onclick="cambiarModoRegistro('horometros')">⏱ Horómetros</button>
+      <button class="chip" id="tabRegLuz" onclick="cambiarModoRegistro('luz')">💡 Luz nocturna</button>
     </div>
-    <div id="listaHorometrosRegistro"></div>
+
+    <div id="registroHoro">
+      <div class="tarjeta">
+        <div class="fila">
+          <div><label for="regFecha">Fecha</label><input type="date" id="regFecha"></div>
+          <div><label for="regBloque">Bloque</label><select id="regBloque" onchange="cargarHorometrosBloque()"></select></div>
+        </div>
+        <div id="infoBloque" style="font-size:12px;color:var(--texto2);margin-top:8px"></div>
+      </div>
+      <div id="listaHorometrosRegistro"></div>
+    </div>
+
+    <div id="registroLuz" style="display:none">
+      <div class="tarjeta">
+        <div class="fila">
+          <div><label for="luzBloque">Bloque</label><select id="luzBloque"></select></div>
+          <div><label for="luzCama">Cama</label><input type="number" id="luzCama" min="1" class="mono" placeholder="ej. 64"></div>
+          <div><label for="luzLado">Lado</label><select id="luzLado"><option value="A">A</option><option value="B">B</option></select></div>
+        </div>
+        <label for="luzFechaHora">Fecha y hora de la lectura</label>
+        <input type="datetime-local" id="luzFechaHora">
+        <div class="fila" style="margin-top:4px">
+          <div><label for="luzAnterior">Anterior</label><input type="number" step="0.01" min="0" id="luzAnterior" class="mono luzVal" placeholder="0.00" oninput="revisarUmbralLuz()"></div>
+          <div><label for="luzPosterior">Posterior</label><input type="number" step="0.01" min="0" id="luzPosterior" class="mono luzVal" placeholder="0.00" oninput="revisarUmbralLuz()"></div>
+        </div>
+        <div class="fila" style="margin-top:4px">
+          <div><label for="luzBajo">Bajo bombillo</label><input type="number" step="0.01" min="0" id="luzBajo" class="mono luzVal" placeholder="0.00" oninput="revisarUmbralLuz()"></div>
+          <div><label for="luzEntre">Entre bombillo</label><input type="number" step="0.01" min="0" id="luzEntre" class="mono luzVal" placeholder="0.00" oninput="revisarUmbralLuz()"></div>
+          <div><label for="luzBorde">Borde</label><input type="number" step="0.01" min="0" id="luzBorde" class="mono luzVal" placeholder="0.00" oninput="revisarUmbralLuz()"></div>
+        </div>
+        <div style="font-size:12px;color:var(--texto2);margin-top:8px">Referencia mínima: <b class="mono" style="color:var(--ambar)">1.5 µmol/m²/s</b> en cada punto.</div>
+        <div class="deltaPrevio" id="avisoLuz"></div>
+        <div class="obsCampo" id="obsLuzWrap">
+          <label for="obsLuz">Observación (obligatoria por valores bajo la referencia)</label>
+          <textarea id="obsLuz" rows="2" placeholder="ej. Bombillo fundido en cama 64, guirnalda floja…"></textarea>
+        </div>
+        <button class="guardarMini" onclick="guardarLecturaLuz()">Guardar lectura de luz</button>
+      </div>
+    </div>
   </section>
 
   <!-- PENDIENTES -->
@@ -188,6 +224,10 @@
   <!-- LECTURAS (dashboard) -->
   <section class="seccion" id="sec-alertas">
     <div class="tarjeta">
+      <div style="display:flex;gap:6px;margin-bottom:10px">
+        <button class="chip activoChip" id="tabDashHoro" onclick="cambiarModoDashboard('horometros')">⏱ Horómetros</button>
+        <button class="chip" id="tabDashLuz" onclick="cambiarModoDashboard('luz')">💡 Luz nocturna</button>
+      </div>
       <div class="fila">
         <div><label for="alDesde">Desde</label><input type="date" id="alDesde" onchange="cargarAlertas()"></div>
         <div><label for="alHasta">Hasta</label><input type="date" id="alHasta" onchange="cargarAlertas()"></div>
@@ -201,13 +241,13 @@
       </div>
       <div class="fila" style="margin-top:4px">
         <div><label for="alBloque">Bloque</label><select id="alBloque" onchange="poblarFiltroHorometro();cargarAlertas()"></select></div>
-        <div><label for="alHorometro">Horómetro</label><select id="alHorometro" onchange="cargarAlertas()"><option value="">Todos</option></select></div>
+        <div id="filtroHoroWrap"><label for="alHorometro">Horómetro</label><select id="alHorometro" onchange="cargarAlertas()"><option value="">Todos</option></select></div>
       </div>
       <div class="fila" style="margin-top:4px">
         <div><label for="alFiltro">Mostrar</label>
           <select id="alFiltro" onchange="cargarAlertas()">
             <option value="todas">Todas las lecturas</option>
-            <option value="alertas">Solo alertas (&lt; 2 h)</option>
+            <option value="alertas">Solo alertas</option>
           </select>
         </div>
         <div style="display:flex;align-items:flex-end"><button class="btn" style="margin-top:0" onclick="exportarCSV()">⬇ Exportar CSV</button></div>
@@ -216,7 +256,7 @@
     <div class="resumenDia">
       <div class="kpi"><div class="num" id="kpiLect">0</div><div class="lbl">Lecturas</div></div>
       <div class="kpi"><div class="num" style="color:var(--rojo)" id="kpiAlert">0</div><div class="lbl">Alertas</div></div>
-      <div class="kpi"><div class="num" style="color:var(--verde)" id="kpiOk">—</div><div class="lbl">% noches OK</div></div>
+      <div class="kpi"><div class="num" style="color:var(--verde)" id="kpiOk">—</div><div class="lbl" id="kpiOkLbl">% noches OK</div></div>
     </div>
     <div class="tarjeta">
       <h2 style="margin-top:0">🚶 Recorrido del operario</h2>
@@ -296,6 +336,7 @@ const MIN_POR_BLOQUE = 3;      // minutos estimados de registro por bloque
 const HORA_INICIO_REGISTRO = 6;   // ventana laboral de registro: 6 a.m.
 const HORA_FIN_REGISTRO = 14;     // hasta las 2 p.m.
 const HORA_AVISO_PENDIENTES = 13; // a la 1 p.m. se alerta si hay bloques sin registrar
+const UMBRAL_LUZ = 1.5;           // µmol/m²/s mínimo esperado en cada punto de luz nocturna
 
 const db = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
 
@@ -397,7 +438,7 @@ async function iniciarSesion(){
   await arrancarApp();
 }
 async function cerrarSesion(){
-  if(lsGet('colaLecturas', []).length && !confirm('Hay registros sin sincronizar. ¿Salir de todos modos?')) return;
+  if((lsGet('colaLecturas', []).length + lsGet('colaLuz', []).length) && !confirm('Hay registros sin sincronizar. ¿Salir de todos modos?')) return;
   await db.auth.signOut();
   localStorage.removeItem('perfilCache');
   location.reload();
@@ -463,15 +504,15 @@ function mostrarLoginOffline(){
 
 /* ------------------------- red / cola de sincronización ------------------------- */
 function actualizarBanner(){
-  const cola = lsGet('colaLecturas', []);
+  const cola = lsGet('colaLecturas', []).length + lsGet('colaLuz', []).length;
   const banner = $('bannerRed');
   if(!hayRed()){
     banner.classList.add('visible');
-    $('bannerTexto').textContent = `Sin conexión — ${cola.length} registro(s) guardado(s) en el dispositivo.`;
+    $('bannerTexto').textContent = `Sin conexión — ${cola} registro(s) guardado(s) en el dispositivo.`;
     $('btnSync').style.display = 'none';
-  } else if(cola.length){
+  } else if(cola){
     banner.classList.add('visible');
-    $('bannerTexto').textContent = `${cola.length} registro(s) pendiente(s) de subir.`;
+    $('bannerTexto').textContent = `${cola} registro(s) pendiente(s) de subir.`;
     $('btnSync').style.display = 'inline-block';
   } else {
     banner.classList.remove('visible');
@@ -501,6 +542,17 @@ async function sincronizarCola(){
     if(error && !error.message.includes('duplicate') && !error.message.includes('justificacion_unica')) fallidasJ.push(j);
   }
   lsSet('colaJustificaciones', fallidasJ);
+
+  // lecturas de luz nocturna en cola
+  let colaL = lsGet('colaLuz', []);
+  const fallidasL = [];
+  for(const l of colaL){
+    const { error } = await db.from('lecturas_luz').insert(l);
+    if(error){ l._error = error.message; fallidasL.push(l); }
+  }
+  lsSet('colaLuz', fallidasL);
+  if(colaL.length && !fallidasL.length) aviso(`✔ ${colaL.length} lectura(s) de luz sincronizada(s).`);
+  if(fallidasL.length) aviso(`${fallidasL.length} lectura(s) de luz no se pudieron subir: ${fallidasL[0]._error}`, true);
 
   // recorridos en cola
   let colaR = lsGet('colaRecorridos', []);
@@ -546,6 +598,7 @@ function refrescarSelectorRegistro(){
   sel.innerHTML = visibles.map(b => `<option value="${b.id}">Bloque ${b.codigo}</option>`).join('')
     || '<option value="">Sin bloques en luces</option>';
   if(previo && visibles.some(b => b.id === Number(previo))) sel.value = previo;
+  poblarSelectorLuz();
 }
 
 function pintarTablaBloques(){
@@ -951,8 +1004,134 @@ function revisarNotificacionPendientes(){
   aviso('⚠ ' + cuerpo, true);
 }
 
+/* ------------------------- luz nocturna ------------------------- */
+let modoRegistro = 'horometros';   // 'horometros' | 'luz'
+let modoDashboard = 'horometros';  // 'horometros' | 'luz'
+
+function ahoraLocalBogota(){
+  // 'YYYY-MM-DDTHH:MM' para el input datetime-local, en hora de Colombia
+  return new Date().toLocaleString('sv-SE', {timeZone:'America/Bogota'}).slice(0,16).replace(' ', 'T');
+}
+
+function cambiarModoRegistro(m){
+  modoRegistro = m;
+  $('tabRegHoro').classList.toggle('activoChip', m === 'horometros');
+  $('tabRegLuz').classList.toggle('activoChip', m === 'luz');
+  $('registroHoro').style.display = m === 'horometros' ? 'block' : 'none';
+  $('registroLuz').style.display = m === 'luz' ? 'block' : 'none';
+  if(m === 'luz'){
+    if(!$('luzFechaHora').value) $('luzFechaHora').value = ahoraLocalBogota();
+    poblarSelectorLuz();
+  }
+}
+
+function poblarSelectorLuz(){
+  // Mismos bloques del registro de horómetros (los que están en luces)
+  const horos = lsGet('cacheHorometros', []);
+  const conLuces = new Set(horos.map(h => h.bloque_id));
+  const visibles = horos.length ? bloques.filter(b => conLuces.has(b.id)) : bloques;
+  const sel = $('luzBloque');
+  const previo = sel.value;
+  sel.innerHTML = visibles.map(b => `<option value="${b.id}">Bloque ${b.codigo}</option>`).join('');
+  if(previo && visibles.some(b => b.id === Number(previo))) sel.value = previo;
+}
+
+function valoresLuz(){
+  return {
+    anterior: parseFloat($('luzAnterior').value),
+    posterior: parseFloat($('luzPosterior').value),
+    bajo_bombillo: parseFloat($('luzBajo').value),
+    entre_bombillo: parseFloat($('luzEntre').value),
+    borde: parseFloat($('luzBorde').value)
+  };
+}
+
+function revisarUmbralLuz(){
+  const v = valoresLuz();
+  const caja = $('avisoLuz'), obs = $('obsLuzWrap');
+  const llenos = Object.values(v).filter(x => !isNaN(x));
+  caja.className = 'deltaPrevio';
+  obs.classList.remove('visible');
+  if(!llenos.length) return;
+  const bajos = Object.entries(v).filter(([_, x]) => !isNaN(x) && x < UMBRAL_LUZ);
+  if(bajos.length){
+    const nombres = { anterior:'Anterior', posterior:'Posterior', bajo_bombillo:'Bajo bombillo', entre_bombillo:'Entre bombillo', borde:'Borde' };
+    caja.classList.add('mal');
+    caja.textContent = `⚠ Bajo la referencia de ${UMBRAL_LUZ} µmol/m²/s: ${bajos.map(([k]) => nombres[k]).join(', ')}. Escriba una observación.`;
+    obs.classList.add('visible');
+  } else if(llenos.length === 5){
+    caja.classList.add('ok');
+    caja.textContent = `✔ Los 5 puntos cumplen la referencia mínima de ${UMBRAL_LUZ} µmol/m²/s.`;
+  }
+}
+
+async function guardarLecturaLuz(){
+  if(perfil && perfil.rol === 'consulta'){ aviso('Usuario de solo consulta: no puede realizar registros.', true); return; }
+  const bloqueId = Number($('luzBloque').value);
+  const cama = parseInt($('luzCama').value);
+  const lado = $('luzLado').value;
+  const fh = $('luzFechaHora').value;
+  const v = valoresLuz();
+  const obsEl = $('obsLuz');
+  const observacion = obsEl.value.trim() ? obsEl.value.trim() : null;
+
+  if(!bloqueId){ aviso('Seleccione el bloque.', true); return; }
+  if(isNaN(cama) || cama < 1){ aviso('Ingrese el número de cama.', true); return; }
+  if(!fh){ aviso('Indique la fecha y hora de la lectura.', true); return; }
+  if(Object.values(v).some(x => isNaN(x) || x < 0)){ aviso('Complete las 5 mediciones con valores válidos.', true); return; }
+
+  const hayBajos = Object.values(v).some(x => x < UMBRAL_LUZ);
+  if(hayBajos && !observacion){
+    $('obsLuzWrap').classList.add('visible');
+    aviso(`⚠ Hay valores bajo ${UMBRAL_LUZ} µmol/m²/s: debe escribir una observación antes de guardar.`, true);
+    return;
+  }
+
+  const fila = {
+    bloque_id: bloqueId, cama, lado,
+    medido_en: fh + ':00-05:00',   // hora de Colombia
+    anterior: v.anterior, posterior: v.posterior,
+    bajo_bombillo: v.bajo_bombillo, entre_bombillo: v.entre_bombillo, borde: v.borde,
+    observacion, usuario_id: perfil.id
+  };
+
+  if(hayRed()){
+    const { error } = await db.from('lecturas_luz').insert(fila);
+    if(error){
+      if(error.message.includes('observación') || error.message.includes('µmol')){
+        $('obsLuzWrap').classList.add('visible');
+        aviso('⚠ Valores bajo la referencia: debe escribir una observación.', true);
+      } else aviso('Error: ' + error.message, true);
+      return;
+    }
+    aviso('Lectura de luz guardada ✔');
+  } else {
+    const cola = lsGet('colaLuz', []);
+    cola.push(fila); lsSet('colaLuz', cola);
+    aviso('⏳ Sin conexión: lectura de luz guardada en el dispositivo.');
+  }
+
+  // Limpiar solo mediciones y observación; conservar bloque/cama/lado para el siguiente punto
+  ['luzAnterior','luzPosterior','luzBajo','luzEntre','luzBorde'].forEach(id => $(id).value = '');
+  $('obsLuz').value = '';
+  $('luzFechaHora').value = ahoraLocalBogota();
+  revisarUmbralLuz();
+  registrarPosicion('lectura');
+  actualizarBanner();
+}
+
 /* ------------------------- dashboard de lecturas ------------------------- */
-let ultimaConsulta = [];   // datos de la última consulta del dashboard (para exportar)
+let ultimaConsulta = [];      // datos de la última consulta del dashboard (para exportar)
+let ultimaConsultaLuz = [];   // datos de la última consulta de luz nocturna (para exportar)
+
+function cambiarModoDashboard(m){
+  modoDashboard = m;
+  $('tabDashHoro').classList.toggle('activoChip', m === 'horometros');
+  $('tabDashLuz').classList.toggle('activoChip', m === 'luz');
+  $('filtroHoroWrap').style.display = m === 'horometros' ? 'block' : 'none';
+  $('kpiOkLbl').textContent = m === 'horometros' ? '% noches OK' : '% puntos OK';
+  cargarAlertas();
+}
 
 function poblarFiltroHorometro(){
   const bloqueId = Number($('alBloque').value);
@@ -978,6 +1157,7 @@ function rangoRapido(tipo){
 }
 
 async function cargarAlertas(){
+  if(modoDashboard === 'luz'){ return cargarLuzDashboard(); }
   if(!hayRed()){
     $('listaAlertas').innerHTML = '<div class="vacio">El historial de lecturas requiere conexión.</div>';
     return;
@@ -1183,7 +1363,94 @@ async function toggleHorometro(id, activo, nombre, codBloque){
   await cargarEstadoDia();
 }
 
+/* ------------------------- dashboard: luz nocturna ------------------------- */
+async function cargarLuzDashboard(){
+  if(!hayRed()){
+    $('listaAlertas').innerHTML = '<div class="vacio">El historial de luz nocturna requiere conexión.</div>';
+    return;
+  }
+  const desde = $('alDesde').value, hasta = $('alHasta').value;
+  const bloqueId = $('alBloque').value;
+  const soloAlertas = $('alFiltro').value === 'alertas';
+
+  let q = db.from('lecturas_luz')
+    .select('*, bloques(codigo)')
+    .order('medido_en', { ascending:false }).limit(500);
+  if(desde) q = q.gte('medido_en', desde + 'T00:00:00-05:00');
+  if(hasta) q = q.lte('medido_en', hasta + 'T23:59:59-05:00');
+  if(soloAlertas) q = q.eq('bajo_umbral', true);
+  if(bloqueId) q = q.eq('bloque_id', Number(bloqueId));
+
+  const { data, error } = await q;
+  if(error){ aviso(error.message, true); return; }
+
+  // Nombres de quien registró (misma resolución aparte que en horómetros)
+  const { data: perfilesAll } = await db.from('perfiles').select('id, nombre');
+  const nombrePorId = {};
+  (perfilesAll || []).forEach(p => { nombrePorId[p.id] = p.nombre; });
+
+  ultimaConsultaLuz = data || [];
+  const total = ultimaConsultaLuz.length;
+  const nBajos = ultimaConsultaLuz.filter(l => l.bajo_umbral).length;
+  $('kpiLect').textContent = total;
+  $('kpiAlert').textContent = nBajos;
+  $('kpiOk').textContent = total ? Math.round(100 * (total - nBajos) / total) + '%' : '—';
+
+  if(!total){
+    $('listaAlertas').innerHTML = '<div class="vacio">Sin lecturas de luz con los filtros seleccionados.</div>';
+    return;
+  }
+
+  const fmtHora = t => new Date(t).toLocaleString('es-CO', {day:'2-digit', month:'2-digit', year:'numeric', hour:'2-digit', minute:'2-digit', timeZone:'America/Bogota'});
+  const celda = (nombre, valor) => {
+    const bajo = Number(valor) < UMBRAL_LUZ;
+    return `<div style="text-align:center"><div style="font-size:10px;color:var(--texto2);text-transform:uppercase;letter-spacing:.04em">${nombre}</div><div class="mono" style="font-weight:700;color:${bajo ? 'var(--rojo)' : 'var(--verde)'}">${Number(valor).toFixed(2)}</div></div>`;
+  };
+
+  $('listaAlertas').innerHTML = ultimaConsultaLuz.map(l => `
+    <div class="alertaItem" style="border-left-color:${l.bajo_umbral ? 'var(--rojo)' : 'var(--verde)'}">
+      <div class="alertaCab">
+        <span>Bloque <b>${l.bloques?.codigo ?? '?'}</b> · Cama ${l.cama}${l.lado}${l.bajo_umbral ? ' · ⚠' : ''}</span>
+        <span class="mono">${fmtHora(l.medido_en)}</span>
+      </div>
+      <div style="display:grid;grid-template-columns:repeat(5,1fr);gap:6px;margin-top:10px">
+        ${celda('Anterior', l.anterior)}
+        ${celda('Posterior', l.posterior)}
+        ${celda('Bajo bomb.', l.bajo_bombillo)}
+        ${celda('Entre bomb.', l.entre_bombillo)}
+        ${celda('Borde', l.borde)}
+      </div>
+      <div style="font-size:12px;color:var(--texto2);margin-top:8px">Registró: ${nombrePorId[l.usuario_id] ?? '—'}</div>
+      ${l.observacion ? `<div class="alertaObs">📝 ${l.observacion}</div>` : ''}
+    </div>`).join('');
+}
+
+function exportarCSVLuz(){
+  if(!ultimaConsultaLuz.length){ aviso('No hay lecturas de luz para exportar. Ajuste los filtros primero.', true); return; }
+  const enc = ['Fecha y hora','Bloque','Cama','Lado','Anterior','Posterior','Bajo bombillo','Entre bombillo','Borde','Bajo referencia','Observacion'];
+  const esc = v => '"' + String(v ?? '').replace(/"/g, '""') + '"';
+  const num = v => String(Number(v).toFixed(2)).replace('.', ',');
+  const filas = ultimaConsultaLuz.map(l => [
+    new Date(l.medido_en).toLocaleString('es-CO', {timeZone:'America/Bogota'}),
+    l.bloques?.codigo ?? '',
+    l.cama, l.lado,
+    num(l.anterior), num(l.posterior), num(l.bajo_bombillo), num(l.entre_bombillo), num(l.borde),
+    l.bajo_umbral ? 'SI' : 'NO',
+    l.observacion ?? ''
+  ].map(esc).join(';'));
+  const csv = '\uFEFF' + enc.join(';') + '\n' + filas.join('\n');
+  const blob = new Blob([csv], { type: 'text/csv;charset=utf-8' });
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(blob);
+  const d = $('alDesde').value || 'inicio', h = $('alHasta').value || 'hoy';
+  a.download = `luz_nocturna_${d}_a_${h}.csv`;
+  a.click();
+  URL.revokeObjectURL(a.href);
+  aviso(`⬇ ${ultimaConsultaLuz.length} lecturas de luz exportadas a CSV.`);
+}
+
 function exportarCSV(){
+  if(modoDashboard === 'luz'){ return exportarCSVLuz(); }
   if(!ultimaConsulta.length){ aviso('No hay datos para exportar. Ajuste los filtros y espere a que carguen las lecturas.', true); return; }
   const enc = ['Fecha','Bloque','Horometro','Naves','Lectura (h)','Delta (h)','Alerta','Observacion','Registro'];
   const esc = v => '"' + String(v ?? '').replace(/"/g, '""') + '"';

@@ -11,7 +11,10 @@ PWA para el registro y validación de horómetros de guirnaldas (iluminación po
 - **Modo día / noche:** botón ☀/☾ en la cabecera; se recuerda la preferencia.
 - **Ubicación del operario:** GPS en vivo, registro del recorrido (pings cada 5 min + posición al guardar cada lectura) y **tiempo estimado de recorrido** a los bloques pendientes (caminando a 4 km/h + 3 min de registro por bloque).
 - **Bloques pendientes:** pestaña con los bloques del día sin registrar. Desde las 4 p.m. la app **notifica** los pendientes y exige registrar la lectura o **justificar por qué no se recorrió**.
-- **Roles:** operario (registra), supervisor (además crea horómetros y captura GPS de bloques), administrador (todo + gestión de bloques y usuarios).
+- **Roles:** operario (registra), supervisor (además crea horómetros y captura GPS de bloques), administrador (todo + gestión de bloques y usuarios), consulta (acceso único a la pestaña Lecturas: ver registros, alertas, mapa de recorridos y exportar CSV — sin poder registrar, justificar ni editar nada, bloqueado también a nivel de base de datos).
+- **Dashboard de lecturas:** filtros por fecha (con chips rápidos Hoy/7 días/30 días/Todo el historial — vista por defecto), bloque y horómetro, más exportación a CSV.
+- **Luz nocturna:** registro por bloque, cama y lado (A/B) con fecha y hora editables y 5 puntos de medición (anterior, posterior, bajo bombillo, entre bombillo, borde); si algún punto queda bajo la referencia de 1.5 µmol/m²/s se exige observación (validado en app y servidor). Funciona offline con la misma cola de sincronización, y se visualiza y exporta desde el dashboard de Lecturas con el conmutador Horómetros/Luz nocturna.
+- **Edición de horómetros:** nombre y rango de naves editables (supervisor/administrador), con validación de solapamiento contra otros horómetros activos del mismo bloque.
 
 ## Instalación
 
@@ -25,6 +28,7 @@ En el SQL Editor de tu proyecto Supabase ejecuta **en orden**:
 4. `actualizacion_v4.sql` (supervisores ven la lista de usuarios para el mapa de recorridos)
 5. `actualizacion_v5.sql` (rangos de naves sin solapamiento; operarios pueden pausar/reactivar horómetros)
 6. `actualizacion_v6.sql` (rol 'consulta' de solo visualización)
+7. `actualizacion_v7.sql` (lecturas de luz nocturna: 5 puntos por cama/lado contra referencia de 1.5 µmol/m²/s)
 
 Luego crea los usuarios en **Authentication → Users** con correos sintéticos internos
 (`nombreusuario@trigal.local` + **Auto Confirm User** ✅). En la app, cada persona inicia
@@ -83,6 +87,7 @@ La app queda en `https://TU_USUARIO.github.io/horometros-fotoperiodo/`.
 | `actualizacion_v4.sql` | Actualización: supervisores ven usuarios (mapa de recorridos) |
 | `actualizacion_v5.sql` | Actualización: anti-solapamiento de naves + pausa por operarios |
 | `actualizacion_v6.sql` | Actualización: rol consulta (solo dashboard) |
+| `actualizacion_v7.sql` | Actualización: lecturas de luz nocturna (µmol/m²/s) |
 
 ## Parámetros ajustables (en `index.html`, sección CONFIG)
 
