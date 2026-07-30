@@ -30,6 +30,7 @@ En el SQL Editor de tu proyecto Supabase ejecuta **en orden**:
 5. `actualizacion_v5.sql` (rangos de naves sin solapamiento; operarios pueden pausar/reactivar horómetros)
 6. `actualizacion_v6.sql` (rol 'consulta' de solo visualización)
 7. `actualizacion_v7.sql` (lecturas de luz nocturna: 5 puntos por cama/lado contra referencia de 1.5 µmol/m²/s)
+8. `actualizacion_v8.sql` (evita duplicados accidentales en luz nocturna)
 
 Luego crea los usuarios en **Authentication → Users** con correos sintéticos internos
 (`nombreusuario@trigal.local` + **Auto Confirm User** ✅). En la app, cada persona inicia
@@ -89,6 +90,7 @@ La app queda en `https://TU_USUARIO.github.io/horometros-fotoperiodo/`.
 | `actualizacion_v5.sql` | Actualización: anti-solapamiento de naves + pausa por operarios |
 | `actualizacion_v6.sql` | Actualización: rol consulta (solo dashboard) |
 | `actualizacion_v7.sql` | Actualización: lecturas de luz nocturna (µmol/m²/s) |
+| `actualizacion_v8.sql` | Actualización: restricción anti-duplicados en luz nocturna |
 
 ## Parámetros ajustables (en `index.html`, sección CONFIG)
 

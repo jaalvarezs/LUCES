@@ -205,7 +205,7 @@
           <label for="obsLuz">Observación (obligatoria por valores bajo la referencia)</label>
           <textarea id="obsLuz" rows="2" placeholder="ej. Bombillo fundido en cama 64, guirnalda floja…"></textarea>
         </div>
-        <button class="guardarMini" onclick="guardarLecturaLuz()">Guardar lectura de luz</button>
+        <button class="guardarMini" id="btnGuardarLuz" onclick="guardarLecturaLuz()">Guardar lectura de luz</button>
       </div>
     </div>
   </section>
@@ -549,7 +549,9 @@ async function sincronizarCola(){
   const fallidasL = [];
   for(const l of colaL){
     const { error } = await db.from('lecturas_luz').insert(l);
-    if(error){ l._error = error.message; fallidasL.push(l); }
+    if(error && !error.message.includes('duplicate') && !error.message.includes('lecturas_luz_unica')){
+      l._error = error.message; fallidasL.push(l);
+    }
   }
   lsSet('colaLuz', fallidasL);
   if(colaL.length && !fallidasL.length) aviso(`✔ ${colaL.length} lectura(s) de luz sincronizada(s).`);
@@ -780,7 +782,7 @@ async function cargarHorometrosBloque(){
           <textarea id="obs-${h.id}" rows="2" placeholder="ej. Corte de energía 8pm–2am, breaker disparado…">${reg.observacion ?? ''}</textarea>
         </div>
         <div style="display:flex;gap:8px">
-          <button class="guardarMini" style="flex:1" onclick="guardarEdicionLectura(${reg.id}, ${h.id})">Guardar cambios</button>
+          <button class="guardarMini" id="btnGuardarEdit-${h.id}" style="flex:1" onclick="guardarEdicionLectura(${reg.id}, ${h.id})">Guardar cambios</button>
           <button class="guardarMini" style="flex:1;background:var(--panel2);color:var(--texto)" onclick="cancelarEdicion()">Cancelar</button>
         </div>
       </div>`;
@@ -799,7 +801,7 @@ async function cargarHorometrosBloque(){
         <label for="obs-${h.id}">Observación (obligatoria por alerta)</label>
         <textarea id="obs-${h.id}" rows="2" placeholder="ej. Corte de energía 8pm–2am, breaker disparado…"></textarea>
       </div>
-      <button class="guardarMini" onclick="guardarLectura(${h.id})">Guardar lectura</button></div>`;
+      <button class="guardarMini" id="btnGuardar-${h.id}" onclick="guardarLectura(${h.id})">Guardar lectura</button></div>`;
   }).join('');
 
   // Si algún horómetro quedó en modo edición, precalcula su vista de delta/observación
@@ -859,14 +861,20 @@ async function guardarLectura(horoId){
   }
 
   const fila = { horometro_id: horoId, fecha, valor: v, observacion, usuario_id: perfil.id };
+  const btn = $('btnGuardar-'+horoId);
 
   if(hayRed()){
+    if(btn) btn.disabled = true;
     const { error } = await db.from('lecturas').insert(fila);
+    if(btn) btn.disabled = false;
     if(error){
-      if(error.message.includes('observación') || error.message.includes('ALERTA')){
+      if(error.message.includes('lectura_unica') || error.message.includes('duplicate key')){
+        aviso('Ya existe una lectura para este horómetro en esa fecha. Actualice la pantalla — puede corregirla con "✎ Editar".', true);
+      } else if(error.message.includes('observación') || error.message.includes('ALERTA')){
         $('obsWrap-'+horoId).classList.add('visible');
         aviso('⚠ Alerta: debe escribir una observación.', true);
       } else aviso('Error: ' + error.message, true);
+      await cargarHorometrosBloque();
       return;
     }
     aviso('Lectura guardada ✔');
@@ -911,7 +919,10 @@ async function guardarEdicionLectura(lecturaId, horoId){
   const obsEl = $('obs-'+horoId);
   const observacion = obsEl && obsEl.value.trim() ? obsEl.value.trim() : null;
 
+  const btn = $('btnGuardarEdit-'+horoId);
+  if(btn) btn.disabled = true;
   const { error } = await db.from('lecturas').update({ valor: v, observacion }).eq('id', lecturaId);
+  if(btn) btn.disabled = false;
   if(error){
     if(error.message.includes('observación') || error.message.includes('ALERTA')){
       $('obsWrap-'+horoId).classList.add('visible');
@@ -1161,9 +1172,14 @@ async function guardarLecturaLuz(){
   };
 
   if(hayRed()){
+    const btn = $('btnGuardarLuz');
+    if(btn) btn.disabled = true;
     const { error } = await db.from('lecturas_luz').insert(fila);
+    if(btn) btn.disabled = false;
     if(error){
-      if(error.message.includes('observación') || error.message.includes('µmol')){
+      if(error.message.includes('lecturas_luz_unica') || error.message.includes('duplicate key')){
+        aviso('Ya se guardó una lectura para esta cama en este mismo minuto. Si va a repetir la medición, cambie la hora.', true);
+      } else if(error.message.includes('observación') || error.message.includes('µmol')){
         $('obsLuzWrap').classList.add('visible');
         aviso('⚠ Valores bajo la referencia: debe escribir una observación.', true);
       } else aviso('Error: ' + error.message, true);
@@ -1172,6 +1188,9 @@ async function guardarLecturaLuz(){
     aviso('Lectura de luz guardada ✔');
   } else {
     const cola = lsGet('colaLuz', []);
+    if(cola.some(c => c.bloque_id === bloqueId && c.cama === cama && c.lado === lado && c.medido_en === fila.medido_en)){
+      aviso('Ya hay una lectura en cola para esta cama en este mismo minuto.', true); return;
+    }
     cola.push(fila); lsSet('colaLuz', cola);
     aviso('⏳ Sin conexión: lectura de luz guardada en el dispositivo.');
   }
