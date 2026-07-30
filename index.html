@@ -348,6 +348,7 @@ const DOMINIO_USUARIOS = '@trigal.local';
 let perfil = null;
 let bloques = [];
 let horometrosBloque = [];
+let editandoLecturaId = null;   // id del horómetro cuya lectura de hoy se está corrigiendo
 let posicion = null;            // {lat, lng, acc}
 let estadoDia = { registrados:new Set(), justificados:new Set() };
 
@@ -757,13 +758,32 @@ async function cargarHorometrosBloque(){
       <div class="horoCab"><span class="horoNombre">${h.nombre}</span><span class="horoRango">naves ${h.nave_desde}–${h.nave_hasta}</span></div>
       <div class="ultima">${prev ? `Última lectura (${prev.fecha}): <b class="mono">${prev.valor.toFixed(1)} h</b>` : 'Sin lecturas anteriores (primera lectura).'}</div>`;
 
-    if(reg){
+    if(reg && editandoLecturaId !== h.id){
+      const puedeEditar = hayRed() && ((reg.usuario_id === perfil.id && fecha === hoyISO()) || esSupervisorOAdmin());
       const pct = reg.delta == null ? 100 : Math.min(100, (Number(reg.delta)/HORAS_ESPERADAS)*100);
       return `<div class="horoItem">${cab}
         <div class="yaRegistrada">✔ Registrado: <b class="mono">${Number(reg.valor).toFixed(1)} h</b>
-        ${reg.delta != null ? ` · Δ <b class="mono">${Number(reg.delta).toFixed(1)} h</b>` : ''}${reg.alerta ? ' · ⚠ ALERTA' : ''}</div>
+        ${reg.delta != null ? ` · Δ <b class="mono">${Number(reg.delta).toFixed(1)} h</b>` : ''}${reg.alerta ? ' · ⚠ ALERTA' : ''}
+        ${puedeEditar ? ` <button class="miniBtn" style="margin-left:6px" onclick="activarEdicion(${h.id})">✎ Editar</button>` : ''}</div>
         <div class="barraLuz"><i class="${reg.alerta?'roja':''}" style="width:${pct}%"></i></div>
         ${reg.observacion ? `<div class="alertaObs">${reg.observacion}</div>` : ''}</div>`;
+    }
+    if(reg && editandoLecturaId === h.id){
+      return `<div class="horoItem" id="horo-${h.id}">${cab}
+        <label for="val-${h.id}">Corregir lectura (horas acumuladas)</label>
+        <input type="number" step="0.1" min="0" id="val-${h.id}" class="mono" value="${Number(reg.valor).toFixed(1)}"
+               oninput="previsualizarDelta(${h.id}, ${prev ? prev.valor : 'null'})">
+        <div class="deltaPrevio" id="delta-${h.id}"></div>
+        <div class="barraLuz"><i id="barra-${h.id}" style="width:0%"></i></div>
+        <div class="obsCampo" id="obsWrap-${h.id}">
+          <label for="obs-${h.id}">Observación</label>
+          <textarea id="obs-${h.id}" rows="2" placeholder="ej. Corte de energía 8pm–2am, breaker disparado…">${reg.observacion ?? ''}</textarea>
+        </div>
+        <div style="display:flex;gap:8px">
+          <button class="guardarMini" style="flex:1" onclick="guardarEdicionLectura(${reg.id}, ${h.id})">Guardar cambios</button>
+          <button class="guardarMini" style="flex:1;background:var(--panel2);color:var(--texto)" onclick="cancelarEdicion()">Cancelar</button>
+        </div>
+      </div>`;
     }
     if(pend){
       return `<div class="horoItem">${cab}
@@ -781,6 +801,12 @@ async function cargarHorometrosBloque(){
       </div>
       <button class="guardarMini" onclick="guardarLectura(${h.id})">Guardar lectura</button></div>`;
   }).join('');
+
+  // Si algún horómetro quedó en modo edición, precalcula su vista de delta/observación
+  if(editandoLecturaId != null && ids.includes(editandoLecturaId)){
+    const prevEdit = ultimas[editandoLecturaId];
+    previsualizarDelta(editandoLecturaId, prevEdit ? prevEdit.valor : null);
+  }
 }
 
 function previsualizarDelta(horoId, prevValor){
@@ -862,6 +888,45 @@ async function guardarLectura(horoId){
   actualizarBanner();
   await cargarHorometrosBloque();
   pintarPendientes();
+}
+
+function activarEdicion(horoId){
+  editandoLecturaId = horoId;
+  cargarHorometrosBloque();
+}
+
+function cancelarEdicion(){
+  editandoLecturaId = null;
+  cargarHorometrosBloque();
+}
+
+async function guardarEdicionLectura(lecturaId, horoId){
+  if(!hayRed()){ aviso('Se requiere conexión para corregir una lectura.', true); return; }
+  if(!dentroVentanaRegistro() && !esSupervisorOAdmin()){
+    aviso(`Solo puede corregir lecturas entre ${HORA_INICIO_REGISTRO}:00 a.m. y ${HORA_FIN_REGISTRO-12}:00 p.m.`, true);
+    return;
+  }
+  const v = parseFloat($('val-'+horoId).value);
+  if(isNaN(v) || v < 0){ aviso('Ingrese una lectura válida.', true); return; }
+  const obsEl = $('obs-'+horoId);
+  const observacion = obsEl && obsEl.value.trim() ? obsEl.value.trim() : null;
+
+  const { error } = await db.from('lecturas').update({ valor: v, observacion }).eq('id', lecturaId);
+  if(error){
+    if(error.message.includes('observación') || error.message.includes('ALERTA')){
+      $('obsWrap-'+horoId).classList.add('visible');
+      aviso('⚠ Alerta de menos de 2 h: debe escribir una observación antes de guardar.', true);
+    } else if(error.message.toLowerCase().includes('row-level security') || error.message.toLowerCase().includes('policy')){
+      aviso('No tiene permiso para editar esta lectura.', true);
+    } else {
+      aviso('Error: ' + error.message, true);
+    }
+    return;
+  }
+  aviso('Lectura corregida ✔');
+  editandoLecturaId = null;
+  await cargarHorometrosBloque();
+  await cargarEstadoDia();
 }
 
 document.addEventListener('change', e => {
