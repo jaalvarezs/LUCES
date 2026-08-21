@@ -212,6 +212,7 @@
 
   <!-- PENDIENTES -->
   <section class="seccion" id="sec-pendientes">
+    <div id="erroresPendientes"></div>
     <div class="resumenDia">
       <div class="kpi"><div class="num" style="color:var(--verde)" id="kpiReg">0</div><div class="lbl">Registrados</div></div>
       <div class="kpi"><div class="num" style="color:var(--ambar)" id="kpiPend">0</div><div class="lbl">Pendientes</div></div>
@@ -486,6 +487,7 @@ async function arrancarApp(){
   await cargarBloques();
   await cargarHorometrosBloque();
   await cargarEstadoDia();
+  pintarErroresPendientes();
   if(hayRed()){
     await sincronizarCola();
     await cargarAlertas();
@@ -524,16 +526,25 @@ window.addEventListener('offline', actualizarBanner);
 
 async function sincronizarCola(){
   if(!hayRed()) return;
-  let cola = lsGet('colaLecturas', []);
+
+  // Autolimpieza: una versión anterior podía "contaminar" el registro con un
+  // campo _error que no es una columna real, haciendo fallar el reintento
+  // para siempre. Se limpia antes de reintentar (arregla también lo que ya
+  // quedó atascado en este dispositivo).
+  const sinCampoInterno = arr => arr.map(({_error, ...limpio}) => limpio);
+
+  let cola = sinCampoInterno(lsGet('colaLecturas', []));
   const fallidas = [];
+  const detalleLect = [];
   for(const item of cola){
     const { error } = await db.from('lecturas').insert(item);
     if(error && !error.message.includes('duplicate') && !error.message.includes('lectura_unica')){
-      item._error = error.message;
       fallidas.push(item);
+      detalleLect.push({ ...item, mensaje: error.message });
     }
   }
   lsSet('colaLecturas', fallidas);
+  lsSet('colaLecturasDetalle', detalleLect);
 
   // justificaciones en cola
   let colaJ = lsGet('colaJustificaciones', []);
@@ -545,17 +556,20 @@ async function sincronizarCola(){
   lsSet('colaJustificaciones', fallidasJ);
 
   // lecturas de luz nocturna en cola
-  let colaL = lsGet('colaLuz', []);
+  let colaL = sinCampoInterno(lsGet('colaLuz', []));
   const fallidasL = [];
+  const detalleLuz = [];
   for(const l of colaL){
     const { error } = await db.from('lecturas_luz').insert(l);
     if(error && !error.message.includes('duplicate') && !error.message.includes('lecturas_luz_unica')){
-      l._error = error.message; fallidasL.push(l);
+      fallidasL.push(l);
+      detalleLuz.push({ ...l, mensaje: error.message });
     }
   }
   lsSet('colaLuz', fallidasL);
+  lsSet('colaLuzDetalle', detalleLuz);
   if(colaL.length && !fallidasL.length) aviso(`✔ ${colaL.length} lectura(s) de luz sincronizada(s).`);
-  if(fallidasL.length) aviso(`${fallidasL.length} lectura(s) de luz no se pudieron subir: ${fallidasL[0]._error}`, true);
+  if(fallidasL.length) aviso(`${fallidasL.length} lectura(s) de luz no se pudieron subir. Revíselas en Pendientes.`, true);
 
   // recorridos en cola
   let colaR = lsGet('colaRecorridos', []);
@@ -566,7 +580,8 @@ async function sincronizarCola(){
 
   actualizarBanner();
   if(cola.length && !fallidas.length) aviso(`✔ ${cola.length} registro(s) sincronizado(s).`);
-  if(fallidas.length) aviso(`${fallidas.length} registro(s) no se pudieron subir: ${fallidas[0]._error}`, true);
+  if(fallidas.length) aviso(`${fallidas.length} registro(s) no se pudieron subir. Revíselos en Pendientes.`, true);
+  pintarErroresPendientes();
   await cargarEstadoDia();
   await cargarHorometrosBloque();
   if(hayRed()) await cargarAlertas();
@@ -858,6 +873,13 @@ async function guardarLectura(horoId){
       aviso('⚠ Alerta de menos de 2 h: debe escribir una observación antes de guardar.', true);
       return;
     }
+  } else if(!hayRed() && !observacion){
+    // Sin conexión y sin referencia previa en este dispositivo: no se puede
+    // saber aquí si esto generará alerta. Se avisa y se pide observación
+    // preventiva para no quedar atascado al sincronizar más tarde.
+    $('obsWrap-'+horoId).classList.add('visible');
+    aviso('Sin conexión y sin lectura anterior guardada en este dispositivo: no se puede validar la alerta. Escriba una observación como precaución (ej. "sin referencia previa, valor tomado del horómetro físico") antes de guardar.', true);
+    return;
   }
 
   const fila = { horometro_id: horoId, fecha, valor: v, observacion, usuario_id: perfil.id };
@@ -943,6 +965,121 @@ async function guardarEdicionLectura(lecturaId, horoId){
 document.addEventListener('change', e => {
   if(e.target && e.target.id === 'regFecha') cargarHorometrosBloque();
 });
+
+/* ------------------------- registros con error (para corregir sin perderlos) ------------------------- */
+function pintarErroresPendientes(){
+  const cont = $('erroresPendientes');
+  if(!cont) return;
+  const detL = lsGet('colaLecturasDetalle', []);
+  const detZ = lsGet('colaLuzDetalle', []);
+  if(!detL.length && !detZ.length){ cont.innerHTML = ''; return; }
+
+  const horosCache = lsGet('cacheTodosHorometros', null) || lsGet('cacheHorometros', []);
+  const filaLectura = (item, idx) => {
+    const h = horosCache.find(x => x.id === item.horometro_id);
+    const b = h ? bloquePorId(h.bloque_id) : null;
+    const necesitaObs = /observaci[oó]n|ALERTA/i.test(item.mensaje || '');
+    return `<div class="alertaItem" style="border-left-color:var(--rojo)">
+      <div class="alertaCab"><span>Bloque ${b?.codigo ?? '?'} · ${h?.nombre ?? '?'} · ${item.fecha}</span><span class="mono">${Number(item.valor).toFixed(1)} h</span></div>
+      <div style="font-size:12px;color:var(--rojo);margin-top:6px">${item.mensaje}</div>
+      ${necesitaObs
+        ? `<textarea id="obsCorr-lect-${idx}" rows="2" placeholder="Escriba la observación…" style="margin-top:8px;width:100%">${item.observacion ?? ''}</textarea>
+           <div style="display:flex;gap:8px;margin-top:6px">
+             <button class="guardarMini" style="flex:1" onclick="reintentarConObs('lect', ${idx})">Guardar observación y reintentar</button>
+             <button class="miniBtn" onclick="descartarPendiente('lect', ${idx})">Descartar</button>
+           </div>`
+        : `<div style="display:flex;gap:8px;margin-top:6px">
+             <button class="miniBtn" onclick="reintentarConObs('lect', ${idx})">Reintentar tal cual</button>
+             <button class="miniBtn" onclick="descartarPendiente('lect', ${idx})">Descartar</button>
+           </div>`}
+    </div>`;
+  };
+  const filaLuz = (item, idx) => {
+    const b = bloquePorId(item.bloque_id);
+    const necesitaObs = /observaci[oó]n|µmol/i.test(item.mensaje || '');
+    return `<div class="alertaItem" style="border-left-color:var(--rojo)">
+      <div class="alertaCab"><span>Bloque ${b?.codigo ?? '?'} · Cama ${item.cama}${item.lado}</span><span class="mono">${new Date(item.medido_en).toLocaleString('es-CO',{timeZone:'America/Bogota',day:'2-digit',month:'2-digit',hour:'2-digit',minute:'2-digit'})}</span></div>
+      <div style="font-size:12px;color:var(--rojo);margin-top:6px">${item.mensaje}</div>
+      ${necesitaObs
+        ? `<textarea id="obsCorr-luz-${idx}" rows="2" placeholder="Escriba la observación…" style="margin-top:8px;width:100%">${item.observacion ?? ''}</textarea>
+           <div style="display:flex;gap:8px;margin-top:6px">
+             <button class="guardarMini" style="flex:1" onclick="reintentarConObs('luz', ${idx})">Guardar observación y reintentar</button>
+             <button class="miniBtn" onclick="descartarPendiente('luz', ${idx})">Descartar</button>
+           </div>`
+        : `<div style="display:flex;gap:8px;margin-top:6px">
+             <button class="miniBtn" onclick="reintentarConObs('luz', ${idx})">Reintentar tal cual</button>
+             <button class="miniBtn" onclick="descartarPendiente('luz', ${idx})">Descartar</button>
+           </div>`}
+    </div>`;
+  };
+
+  cont.innerHTML = `
+    <div class="tarjeta" style="border-color:var(--rojo)">
+      <h2 style="margin-top:0;color:var(--rojo)">⚠ Registros que no se pudieron subir (${detL.length + detZ.length})</h2>
+      <div style="font-size:12px;color:var(--texto2);margin-bottom:10px">No se han perdido — corríjalos aquí o descártelos si fue un error.</div>
+      ${detL.map(filaLectura).join('')}
+      ${detZ.map(filaLuz).join('')}
+    </div>`;
+}
+
+async function reintentarConObs(tipo, idx){
+  if(!hayRed()){ aviso('Se requiere conexión para reintentar.', true); return; }
+  const clave = tipo === 'lect' ? 'colaLecturasDetalle' : 'colaLuzDetalle';
+  const colaClave = tipo === 'lect' ? 'colaLecturas' : 'colaLuz';
+  const tabla = tipo === 'lect' ? 'lecturas' : 'lecturas_luz';
+  const detalle = lsGet(clave, []);
+  const item = detalle[idx];
+  if(!item) return;
+
+  const obsEl = $(`obsCorr-${tipo}-${idx}`);
+  const nuevo = { ...item };
+  delete nuevo.mensaje;
+  if(obsEl) nuevo.observacion = obsEl.value.trim() || null;
+
+  const { error } = await db.from(tabla).insert(nuevo);
+  if(error && !error.message.includes('duplicate')){
+    detalle[idx] = { ...item, observacion: nuevo.observacion, mensaje: error.message };
+    lsSet(clave, detalle);
+    aviso('Sigue sin poder subir: ' + error.message, true);
+    pintarErroresPendientes();
+    return;
+  }
+
+  // Éxito (o ya existía): sacarlo de ambas listas
+  detalle.splice(idx, 1);
+  lsSet(clave, detalle);
+  const cola = lsGet(colaClave, []).filter(c =>
+    tipo === 'lect'
+      ? !(c.horometro_id === item.horometro_id && c.fecha === item.fecha)
+      : !(c.bloque_id === item.bloque_id && c.cama === item.cama && c.lado === item.lado && c.medido_en === item.medido_en)
+  );
+  lsSet(colaClave, cola);
+  aviso('✔ Registro corregido y sincronizado.');
+  pintarErroresPendientes();
+  actualizarBanner();
+  await cargarHorometrosBloque();
+  await cargarEstadoDia();
+}
+
+function descartarPendiente(tipo, idx){
+  if(!confirm('¿Descartar este registro? Se perderá definitivamente — úselo solo si fue un error y no debía guardarse.')) return;
+  const clave = tipo === 'lect' ? 'colaLecturasDetalle' : 'colaLuzDetalle';
+  const colaClave = tipo === 'lect' ? 'colaLecturas' : 'colaLuz';
+  const detalle = lsGet(clave, []);
+  const item = detalle[idx];
+  if(!item) return;
+  detalle.splice(idx, 1);
+  lsSet(clave, detalle);
+  const cola = lsGet(colaClave, []).filter(c =>
+    tipo === 'lect'
+      ? !(c.horometro_id === item.horometro_id && c.fecha === item.fecha)
+      : !(c.bloque_id === item.bloque_id && c.cama === item.cama && c.lado === item.lado && c.medido_en === item.medido_en)
+  );
+  lsSet(colaClave, cola);
+  aviso('Registro descartado.');
+  pintarErroresPendientes();
+  actualizarBanner();
+}
 
 /* ------------------------- PENDIENTES del día ------------------------- */
 async function cargarEstadoDia(){

@@ -91,6 +91,8 @@ La app queda en `https://TU_USUARIO.github.io/horometros-fotoperiodo/`.
 | `actualizacion_v6.sql` | Actualización: rol consulta (solo dashboard) |
 | `actualizacion_v7.sql` | Actualización: lecturas de luz nocturna (µmol/m²/s) |
 | `actualizacion_v8.sql` | Actualización: restricción anti-duplicados en luz nocturna |
+| `actualizacion_v9.sql` | Programa el envío semanal del informe (pg_cron) |
+| `supabase-edge-function-reporte-semanal.ts` | Código de la función que arma y envía el informe (se pega en el panel de Supabase, no en GitHub Pages) |
 
 ## Parámetros ajustables (en `index.html`, sección CONFIG)
 
@@ -108,3 +110,61 @@ La app queda en `https://TU_USUARIO.github.io/horometros-fotoperiodo/`.
 
 ---
 Flores El Trigal S.A.S. — Mantenimiento
+
+
+## Informe semanal automático (horas de luz + novedades)
+
+Cada lunes 7:00 a.m. (hora Colombia) se genera y envía por correo un informe
+con: horas de luz por bloque y horómetro, alertas de la semana, bloques sin
+registrar/justificar, y lecturas de luz nocturna bajo la referencia.
+
+### Cómo activarlo
+
+1. **Crear cuenta en Resend** (gratis, sin tarjeta): https://resend.com — regístrate
+   con el correo al que quieres que lleguen las pruebas (ej. `juan.alvarezs@floreseltrigal.com`).
+2. **Obtener la API key**: Resend → API Keys → Create API Key. Cópiala.
+3. **Desplegar la función**: Supabase → Edge Functions → "Deploy a new function" →
+   "Via Editor". Nómbrala `reporte-semanal` y pega el contenido de
+   `supabase-edge-function-reporte-semanal.ts`. Guardar/Deploy.
+4. **Configurar sus secretos**: dentro de la función → Secrets (o Settings → Edge
+   Functions → Secrets, según la versión del panel):
+   - `RESEND_API_KEY` = la API key del paso 2
+   - `REPORTE_DESTINATARIOS` = correos separados por coma (ej. `juan.alvarezs@floreseltrigal.com`)
+5. **Ejecutar `actualizacion_v9.sql`** en el SQL Editor — deja programado el envío
+   automático de todos los lunes.
+6. **Probar sin esperar al lunes**: en el panel de la función hay un botón de
+   prueba ("Test"/"Send Request") donde puedes ejecutarla manualmente y revisar
+   el correo de inmediato.
+
+### Cuando quieras agregar más destinatarios
+
+Mientras se envíe solo a correos que tú mismo verificaste en Resend, no hace
+falta nada más. Para enviar a cualquier correo de la empresa sin verificarlo
+uno por uno, verifica el dominio `floreseltrigal.com` en Resend (Domains →
+Add Domain, agrega los registros DNS que te indique) y cambia el secreto
+`REPORTE_REMITENTE` a una dirección de ese dominio, ej.
+`Fotoperiodo Trigal <reportes@floreseltrigal.com>`.
+
+
+## Corrección importante — cola de sincronización (20 ago 2026)
+
+Se corrigió un error grave: cuando una lectura no se podía subir, la app
+guardaba el mensaje de error dentro del propio registro antes de reintentarlo,
+dejándolo con un campo que no correspondía a ninguna columna real. Esto hacía
+que el reintento fallara **para siempre**, acumulando registros sin subir
+indefinidamente (se detectó con 61 registros atascados en un dispositivo).
+
+Ya corregido: los reintentos ahora envían el registro limpio, y la versión
+nueva de la app limpia automáticamente cualquier registro que haya quedado
+así de contaminado en versiones anteriores — no hace falta borrar nada a mano.
+
+Además, en la pestaña **Pendientes** ahora aparece un panel rojo con el
+detalle de cualquier registro que no se haya podido subir (bloque, horómetro,
+fecha, motivo), con la opción de agregar la observación que falte y
+reintentar sin perder el dato, o descartarlo si fue un error genuino.
+
+También se agregó un aviso preventivo: si el operario registra **sin
+conexión** y el dispositivo no tiene guardada la lectura anterior de ese
+horómetro, la app no puede saber de antemano si el nuevo valor generará una
+alerta — ahora pide una observación de precaución en ese caso, en vez de
+dejar que el registro falle silenciosamente al sincronizar más tarde.
