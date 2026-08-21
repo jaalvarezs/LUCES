@@ -2,7 +2,7 @@
    Estrategia: cache-first para el cascarón de la app (funciona sin internet);
    las peticiones a Supabase siempre van a la red (los datos offline se
    manejan con la cola en localStorage dentro de la app). */
-const CACHE = 'horometros-v1';
+const CACHE = 'horometros-v2';
 const APP_SHELL = [
   './',
   './index.html',
