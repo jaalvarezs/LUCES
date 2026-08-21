@@ -142,6 +142,7 @@
     <input id="loginPass" type="password" autocomplete="current-password" placeholder="••••••••">
     <button class="btn" id="btnLogin" onclick="iniciarSesion()">Entrar</button>
     <p class="sub" style="margin-top:16px" id="loginOffline"></p>
+    <p style="text-align:center;font-size:10px;color:var(--texto2);opacity:.5;margin-top:6px">v2026.08.20-2</p>
   </div>
 </div>
 
@@ -150,6 +151,7 @@
     <div>
       <div class="titulo">Horómetros</div>
       <div style="font-size:12px;color:var(--texto2)"><span id="usuarioNombre"></span> · <span class="gpsChip" id="gpsEstado">GPS…</span></div>
+      <div style="font-size:10px;color:var(--texto2);opacity:.6" id="versionApp"></div>
     </div>
     <div style="display:flex;align-items:center;gap:8px">
       <span class="rolBadge" id="usuarioRol"></span>
@@ -338,6 +340,9 @@ const HORA_INICIO_REGISTRO = 6;   // ventana laboral de registro: 6 a.m.
 const HORA_FIN_REGISTRO = 14;     // hasta las 2 p.m.
 const HORA_AVISO_PENDIENTES = 13; // a la 1 p.m. se alerta si hay bloques sin registrar
 const UMBRAL_LUZ = 1.5;           // µmol/m²/s mínimo esperado en cada punto de luz nocturna
+// Súbela cada vez que entregues una versión nueva — así se puede confirmar
+// a simple vista, desde la app, cuál versión quedó instalada en cada celular.
+const VERSION_APP = 'v2026.08.20-2';   // 2: incluye la corrección del bug de sincronización
 
 const db = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
 
@@ -463,6 +468,7 @@ async function arrancarApp(){
   $('vistaApp').style.display = 'block';
   $('usuarioNombre').textContent = perfil.nombre;
   $('usuarioRol').textContent = perfil.rol + (hayRed() ? '' : ' · offline');
+  $('versionApp').textContent = VERSION_APP;
   if(esSupervisorOAdmin()) $('formNuevoHoro').style.display = 'block';
   if(esSupervisorOAdmin()) $('formNuevoBloque').style.display = 'block';
   if(perfil.rol === 'consulta'){
