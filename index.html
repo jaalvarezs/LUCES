@@ -15,6 +15,7 @@
     --fondo:#0c1210; --panel:#141d19; --panel2:#1a2620; --borde:#25342c;
     --texto:#e8efe9; --texto2:#8fa398;
     --ambar:#ffb640; --ambar-suave:rgba(255,182,64,.12);
+    --amarillo:#f5d90a; --amarillo-suave:rgba(245,217,10,.14);
     --rojo:#ff6b57; --rojo-suave:rgba(255,107,87,.12);
     --verde:#5fd68a; --verde-suave:rgba(95,214,138,.10);
     --sombra:rgba(0,0,0,.5);
@@ -24,6 +25,7 @@
     --fondo:#f2f4ef; --panel:#ffffff; --panel2:#eef1ea; --borde:#d5dbd0;
     --texto:#1d2620; --texto2:#5d6d62;
     --ambar:#c47d00; --ambar-suave:rgba(196,125,0,.12);
+    --amarillo:#a68a00; --amarillo-suave:rgba(214,180,0,.18);
     --rojo:#c92f1c; --rojo-suave:rgba(201,47,28,.10);
     --verde:#1e7d45; --verde-suave:rgba(30,125,69,.10);
     --sombra:rgba(30,40,32,.15);
@@ -72,7 +74,8 @@
   h2{font-size:14px;font-weight:700;margin:16px 0 10px;color:var(--texto2);text-transform:uppercase;letter-spacing:.06em}
   .tarjeta{background:var(--panel);border:1px solid var(--borde);border-radius:14px;padding:16px;margin-bottom:12px}
   .fila{display:flex;gap:10px}
-  .fila>*{flex:1}
+  .fila>*{flex:1;min-width:0}
+  .fila input{min-width:0;width:100%}
 
   .horoItem{background:var(--panel2);border:1px solid var(--borde);border-radius:12px;padding:14px;margin-top:10px}
   .horoCab{display:flex;justify-content:space-between;align-items:baseline;gap:8px}
@@ -82,9 +85,12 @@
   .ultima b{color:var(--texto)}
   .deltaPrevio{margin-top:10px;border-radius:10px;padding:10px 12px;font-size:13px;display:none}
   .deltaPrevio.ok{display:block;background:var(--verde-suave);color:var(--verde)}
+  .deltaPrevio.amarillo{display:block;background:var(--amarillo-suave);color:var(--amarillo);font-weight:700}
   .deltaPrevio.mal{display:block;background:var(--rojo-suave);color:var(--rojo);font-weight:700}
   .barraLuz{height:6px;border-radius:3px;background:var(--fondo);margin-top:8px;overflow:hidden}
   .barraLuz i{display:block;height:100%;background:var(--ambar);box-shadow:0 0 8px var(--ambar);border-radius:3px;transition:width .3s}
+  .barraLuz i.amarilla{background:var(--amarillo);box-shadow:0 0 8px var(--amarillo)}
+  .barraLuz i.verde{background:var(--verde);box-shadow:0 0 8px var(--verde)}
   .barraLuz i.roja{background:var(--rojo);box-shadow:0 0 8px var(--rojo)}
   .obsCampo{display:none;margin-top:10px}
   .obsCampo.visible{display:block}
@@ -102,9 +108,10 @@
   .pendEta b{color:var(--ambar);font-size:14px}
   .btnJust{margin-top:10px;background:var(--panel2);border:1px solid var(--borde);color:var(--texto);border-radius:8px;padding:8px 12px;font-family:inherit;font-size:13px;cursor:pointer}
   .resumenDia{display:flex;gap:10px;margin-bottom:12px}
-  .kpi{flex:1;background:var(--panel);border:1px solid var(--borde);border-radius:12px;padding:12px;text-align:center}
-  .kpi .num{font-size:24px;font-weight:800}
-  .kpi .lbl{font-size:11px;color:var(--texto2);text-transform:uppercase;letter-spacing:.05em}
+  .kpi{flex:1;min-width:0;background:var(--panel);border:1px solid var(--borde);border-radius:12px;padding:10px 4px;text-align:center}
+  .kpi .num{font-size:22px;font-weight:800}
+  @media (max-width:420px){ .resumenDia{gap:6px} .kpi .num{font-size:19px} .kpi .lbl{font-size:10px;letter-spacing:0} }
+  .kpi .lbl{line-height:1.25;font-size:11px;color:var(--texto2);text-transform:uppercase;letter-spacing:.05em}
 
   .alertaItem{background:var(--panel);border:1px solid var(--borde);border-left:4px solid var(--rojo);border-radius:12px;padding:14px;margin-bottom:10px}
   .alertaCab{display:flex;justify-content:space-between;font-size:13px;color:var(--texto2)}
@@ -250,7 +257,9 @@
         <div><label for="alFiltro">Mostrar</label>
           <select id="alFiltro" onchange="cargarAlertas()">
             <option value="todas">Todas las lecturas</option>
-            <option value="alertas">Solo alertas</option>
+            <option value="novedades">Rojas y amarillas (menos de 2 h)</option>
+            <option value="alertas">Solo rojas (alertas)</option>
+            <option value="amarillos">Solo amarillas</option>
           </select>
         </div>
         <div style="display:flex;align-items:flex-end"><button class="btn" style="margin-top:0" onclick="exportarCSV()">⬇ Exportar CSV</button></div>
@@ -258,8 +267,9 @@
     </div>
     <div class="resumenDia">
       <div class="kpi"><div class="num" id="kpiLect">0</div><div class="lbl">Lecturas</div></div>
-      <div class="kpi"><div class="num" style="color:var(--rojo)" id="kpiAlert">0</div><div class="lbl">Alertas</div></div>
-      <div class="kpi"><div class="num" style="color:var(--verde)" id="kpiOk">—</div><div class="lbl" id="kpiOkLbl">% noches OK</div></div>
+      <div class="kpi" id="kpiAmarWrap"><div class="num" style="color:var(--amarillo)" id="kpiAmar">—</div><div class="lbl">Amarillos</div></div>
+      <div class="kpi"><div class="num" style="color:var(--rojo)" id="kpiAlert">0</div><div class="lbl" id="kpiAlertLbl">Alertas (rojo)</div></div>
+      <div class="kpi"><div class="num" style="color:var(--verde)" id="kpiOk">—</div><div class="lbl" id="kpiOkLbl">% en verde</div></div>
     </div>
     <div class="tarjeta">
       <h2 style="margin-top:0">🚶 Recorrido del operario</h2>
@@ -332,7 +342,20 @@ const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBh
 
 /* Fotoperiodo real: luces de 9 p.m. a 3 a.m., cicladas 10 min luz × 20 min
    oscuridad = 2.0 horas acumuladas por noche en el horómetro. */
-const UMBRAL_HORAS = 2;        // alerta si delta < 2 h (noche incompleta)
+const UMBRAL_VERDE = 2;        // delta >= 2.0 h  -> VERDE (OK)
+const UMBRAL_ROJO = 1.5;       // delta <  1.5 h  -> ROJO (alerta, observación obligatoria)
+const UMBRAL_HORAS = UMBRAL_ROJO;  // la observación solo se exige en rojo
+// entre 1.5 y < 2.0 h -> AMARILLO (se muestra, sin observación obligatoria)
+// Resta en décimas enteras, igual que el servidor (numeric(12,1)): evita que
+// JavaScript dé 2.3 - 0.8 = 1.4999… y pinte en rojo una noche de 1.5 h exactas.
+function deltaHoras(v, prev){ return (Math.round(Number(v)*10) - Math.round(Number(prev)*10)) / 10; }
+function nivelDelta(d){
+  if(d == null || d === '' || isNaN(d)) return 'verde';
+  d = Math.round(Number(d)*10)/10;
+  if(d < UMBRAL_ROJO) return 'rojo';
+  if(d < UMBRAL_VERDE) return 'amarillo';
+  return 'verde';
+}
 const HORAS_ESPERADAS = 2;     // delta esperado por noche (barra al 100%)
 const VEL_CAMINATA_KMH = 4;    // velocidad para estimar tiempo de recorrido
 const MIN_POR_BLOQUE = 3;      // minutos estimados de registro por bloque
@@ -342,7 +365,7 @@ const HORA_AVISO_PENDIENTES = 13; // a la 1 p.m. se alerta si hay bloques sin re
 const UMBRAL_LUZ = 1.5;           // µmol/m²/s mínimo esperado en cada punto de luz nocturna
 // Súbela cada vez que entregues una versión nueva — así se puede confirmar
 // a simple vista, desde la app, cuál versión quedó instalada en cada celular.
-const VERSION_APP = 'v2026.08.20-2';   // 2: incluye la corrección del bug de sincronización
+const VERSION_APP = 'v2026.10.08-1';   // semáforo de 3 niveles: verde ≥2 h, amarillo 1.5–2 h, rojo <1.5 h
 
 const db = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
 
@@ -437,10 +460,29 @@ async function iniciarSesion(){
   const btn = $('btnLogin'); btn.disabled = true;
   let usuario = $('loginEmail').value.trim().toLowerCase();
   if(usuario && !usuario.includes('@')) usuario += DOMINIO_USUARIOS;
-  const { error } = await db.auth.signInWithPassword({
-    email: usuario, password: $('loginPass').value
-  });
+
+  const conLimite = (promesa, ms) => Promise.race([
+    promesa,
+    new Promise((_, rej) => setTimeout(() => rej(new Error('TIEMPO_AGOTADO')), ms))
+  ]);
+
+  let resultado;
+  try {
+    resultado = await conLimite(
+      db.auth.signInWithPassword({ email: usuario, password: $('loginPass').value }),
+      15000
+    );
+  } catch(e){
+    btn.disabled = false;
+    if(e.message === 'TIEMPO_AGOTADO'){
+      aviso('El servidor no respondió a tiempo. El proyecto de Supabase pudo pausarse por inactividad — revíselo en supabase.com/dashboard y vuelva a intentar.', true);
+    } else {
+      aviso('Error de conexión: ' + e.message, true);
+    }
+    return;
+  }
   btn.disabled = false;
+  const { error } = resultado;
   if(error){ aviso('Credenciales incorrectas: ' + error.message, true); return; }
   await arrancarApp();
 }
@@ -786,9 +828,9 @@ async function cargarHorometrosBloque(){
       const pct = reg.delta == null ? 100 : Math.min(100, (Number(reg.delta)/HORAS_ESPERADAS)*100);
       return `<div class="horoItem">${cab}
         <div class="yaRegistrada">✔ Registrado: <b class="mono">${Number(reg.valor).toFixed(1)} h</b>
-        ${reg.delta != null ? ` · Δ <b class="mono">${Number(reg.delta).toFixed(1)} h</b>` : ''}${reg.alerta ? ' · ⚠ ALERTA' : ''}
+        ${reg.delta != null ? ` · Δ <b class="mono">${Number(reg.delta).toFixed(1)} h</b>` : ''}${nivelDelta(reg.delta)==='rojo' ? ' · ⚠ ALERTA' : (nivelDelta(reg.delta)==='amarillo' ? ' · 🟡 Atención' : '')}
         ${puedeEditar ? ` <button class="miniBtn" style="margin-left:6px" onclick="activarEdicion(${h.id})">✎ Editar</button>` : ''}</div>
-        <div class="barraLuz"><i class="${reg.alerta?'roja':''}" style="width:${pct}%"></i></div>
+        <div class="barraLuz"><i class="${{rojo:'roja',amarillo:'amarilla',verde:'verde'}[nivelDelta(reg.delta)]}" style="width:${pct}%"></i></div>
         ${reg.observacion ? `<div class="alertaObs">${reg.observacion}</div>` : ''}</div>`;
     }
     if(reg && editandoLecturaId === h.id){
@@ -837,17 +879,23 @@ function previsualizarDelta(horoId, prevValor){
   const caja = $('delta-'+horoId), barra = $('barra-'+horoId), obs = $('obsWrap-'+horoId);
   caja.className = 'deltaPrevio'; obs.classList.remove('visible'); barra.style.width='0%'; barra.className='';
   if(isNaN(v) || prevValor === null) return;
-  const delta = v - prevValor;
+  const delta = deltaHoras(v, prevValor);
   if(delta < 0){ caja.classList.add('mal'); caja.textContent = 'La lectura es menor a la anterior. Verifique el valor.'; return; }
   barra.style.width = Math.min(100, (delta/HORAS_ESPERADAS)*100) + '%';
-  if(delta < UMBRAL_HORAS){
+  const nivel = nivelDelta(delta);
+  if(nivel === 'rojo'){
     caja.classList.add('mal');
-    caja.textContent = `⚠ Solo ${delta.toFixed(1)} h de luz desde la última lectura. Se generará ALERTA — escriba una observación.`;
+    caja.textContent = `⚠ Solo ${delta.toFixed(1)} h de luz desde la última lectura (menos de ${UMBRAL_ROJO} h). Se generará ALERTA — escriba una observación.`;
     barra.className = 'roja';
     obs.classList.add('visible');
+  } else if(nivel === 'amarillo'){
+    caja.classList.add('amarillo');
+    caja.textContent = `🟡 Δ ${delta.toFixed(1)} h de luz: por debajo de ${UMBRAL_VERDE} h pero sobre ${UMBRAL_ROJO} h. Se guarda en amarillo, sin observación obligatoria.`;
+    barra.className = 'amarilla';
   } else {
     caja.classList.add('ok');
     caja.textContent = `Δ ${delta.toFixed(1)} h de luz registradas. Correcto.`;
+    barra.className = 'verde';
   }
 }
 
@@ -873,10 +921,10 @@ async function guardarLectura(horoId){
 
   if(prev){
     if(v < prev.valor){ aviso(`La lectura (${v}) es menor a la anterior (${prev.valor}). El horómetro es acumulativo.`, true); return; }
-    const delta = v - prev.valor;
-    if(delta < UMBRAL_HORAS && !observacion){
+    const delta = deltaHoras(v, prev.valor);
+    if(nivelDelta(delta) === 'rojo' && !observacion){
       $('obsWrap-'+horoId).classList.add('visible');
-      aviso('⚠ Alerta de menos de 2 h: debe escribir una observación antes de guardar.', true);
+      aviso(`⚠ Alerta de menos de ${UMBRAL_ROJO} h: debe escribir una observación antes de guardar.`, true);
       return;
     }
   } else if(!hayRed() && !observacion){
@@ -954,7 +1002,7 @@ async function guardarEdicionLectura(lecturaId, horoId){
   if(error){
     if(error.message.includes('observación') || error.message.includes('ALERTA')){
       $('obsWrap-'+horoId).classList.add('visible');
-      aviso('⚠ Alerta de menos de 2 h: debe escribir una observación antes de guardar.', true);
+      aviso(`⚠ Alerta de menos de ${UMBRAL_ROJO} h: debe escribir una observación antes de guardar.`, true);
     } else if(error.message.toLowerCase().includes('row-level security') || error.message.toLowerCase().includes('policy')){
       aviso('No tiene permiso para editar esta lectura.', true);
     } else {
@@ -1356,7 +1404,16 @@ function cambiarModoDashboard(m){
   $('tabDashHoro').classList.toggle('activoChip', m === 'horometros');
   $('tabDashLuz').classList.toggle('activoChip', m === 'luz');
   $('filtroHoroWrap').style.display = m === 'horometros' ? 'block' : 'none';
-  $('kpiOkLbl').textContent = m === 'horometros' ? '% noches OK' : '% puntos OK';
+  $('kpiOkLbl').textContent = m === 'horometros' ? '% en verde' : '% puntos OK';
+  $('kpiAlertLbl').textContent = m === 'horometros' ? 'Alertas (rojo)' : 'Bajo ref.';
+  $('kpiAmarWrap').style.display = m === 'horometros' ? '' : 'none';
+  // En luz no hay amarillo: se ocultan esas opciones y "rojas" pasa a "bajo referencia"
+  const sel = $('alFiltro');
+  [...sel.options].forEach(o => {
+    if(o.value === 'amarillos' || o.value === 'novedades') o.hidden = m !== 'horometros';
+    if(o.value === 'alertas') o.textContent = m === 'horometros' ? 'Solo rojas (alertas)' : 'Solo bajo referencia';
+  });
+  if(m !== 'horometros' && (sel.value === 'amarillos' || sel.value === 'novedades')) sel.value = 'alertas';
   cargarAlertas();
 }
 
@@ -1392,14 +1449,16 @@ async function cargarAlertas(){
   const desde = $('alDesde').value, hasta = $('alHasta').value;
   const bloqueId = $('alBloque').value;          // '' = todos
   const horoId = $('alHorometro').value;         // '' = todos
-  const soloAlertas = $('alFiltro').value === 'alertas';
+  const filtro = $('alFiltro').value;
 
   let q = db.from('lecturas')
     .select('*, horometros(nombre, nave_desde, nave_hasta, bloque_id, bloques(codigo))')
     .order('fecha', { ascending:false }).order('horometro_id').limit(500);
   if(desde) q = q.gte('fecha', desde);
   if(hasta) q = q.lte('fecha', hasta);
-  if(soloAlertas) q = q.eq('alerta', true);
+  if(filtro === 'alertas')   q = q.eq('alerta', true);                          // rojo (< 1.5 h)
+  if(filtro === 'amarillos') q = q.gte('delta', UMBRAL_ROJO).lt('delta', UMBRAL_VERDE);
+  if(filtro === 'novedades') q = q.lt('delta', UMBRAL_VERDE);                  // rojo + amarillo
 
   if(horoId){
     q = q.eq('horometro_id', Number(horoId));
@@ -1428,11 +1487,13 @@ async function cargarAlertas(){
   ultimaConsulta = data || [];
 
   const total = (data||[]).length;
-  const nAlertas = (data||[]).filter(l => l.alerta).length;
+  const nAlertas = (data||[]).filter(l => nivelDelta(l.delta)==='rojo' && l.delta != null).length;
+  const nAmarillos = (data||[]).filter(l => l.delta != null && nivelDelta(l.delta)==='amarillo').length;
   const conDelta = (data||[]).filter(l => l.delta != null).length;
   $('kpiLect').textContent = total;
   $('kpiAlert').textContent = nAlertas;
-  $('kpiOk').textContent = conDelta ? Math.round(100*(conDelta-((data||[]).filter(l=>l.alerta&&l.delta!=null).length))/conDelta) + '%' : '—';
+  $('kpiAmar').textContent = nAmarillos;
+  $('kpiOk').textContent = conDelta ? Math.round(100*(conDelta-nAlertas-nAmarillos)/conDelta) + '%' : '—';   // % de noches en verde
 
   const badge = $('numAlertas');
   badge.style.display = nAlertas ? 'flex' : 'none';
@@ -1444,8 +1505,10 @@ async function cargarAlertas(){
   }
 
   $('listaAlertas').innerHTML = data.map(a => {
-    const esAlerta = a.alerta;
-    const borde = esAlerta ? 'var(--rojo)' : 'var(--verde)';
+    const nivel = a.delta != null ? nivelDelta(a.delta) : 'verde';
+    const esAlerta = nivel === 'rojo';
+    const color = {rojo:'var(--rojo)', amarillo:'var(--amarillo)', verde:'var(--verde)'}[nivel];
+    const borde = color;
     const deltaTxt = a.delta != null ? Number(a.delta).toFixed(1) + ' h' : 'primera lectura';
     return `
     <div class="alertaItem" style="border-left-color:${borde}">
@@ -1453,7 +1516,7 @@ async function cargarAlertas(){
         <span>Bloque <b>${a.horometros?.bloques?.codigo ?? '?'}</b> · ${a.horometros?.nombre ?? ''} (naves ${a.horometros?.nave_desde}–${a.horometros?.nave_hasta})</span>
         <span class="mono">${a.fecha}</span>
       </div>
-      <div class="alertaDelta mono" style="color:${esAlerta ? 'var(--rojo)' : 'var(--verde)'}">${deltaTxt}${esAlerta ? ' ⚠' : ''}</div>
+      <div class="alertaDelta mono" style="color:${color}">${deltaTxt}${esAlerta ? ' ⚠' : (nivel==='amarillo' ? ' 🟡' : '')}</div>
       <div style="font-size:12px;color:var(--texto2)">Lectura: <span class="mono">${Number(a.valor).toFixed(1)} h</span> · Registró: ${a.perfiles?.nombre ?? '—'}</div>
       ${a.observacion ? `<div class="alertaObs">📝 ${a.observacion}</div>` : ''}
     </div>`;
@@ -1598,7 +1661,7 @@ async function cargarLuzDashboard(){
   }
   const desde = $('alDesde').value, hasta = $('alHasta').value;
   const bloqueId = $('alBloque').value;
-  const soloAlertas = $('alFiltro').value === 'alertas';
+  const soloAlertas = $('alFiltro').value !== 'todas';   // en luz: rojas/novedades = bajo referencia
 
   let q = db.from('lecturas_luz')
     .select('*, bloques(codigo)')
@@ -1679,7 +1742,7 @@ function exportarCSVLuz(){
 function exportarCSV(){
   if(modoDashboard === 'luz'){ return exportarCSVLuz(); }
   if(!ultimaConsulta.length){ aviso('No hay datos para exportar. Ajuste los filtros y espere a que carguen las lecturas.', true); return; }
-  const enc = ['Fecha','Bloque','Horometro','Naves','Lectura (h)','Delta (h)','Alerta','Observacion','Registro'];
+  const enc = ['Fecha','Bloque','Horometro','Naves','Lectura (h)','Delta (h)','Nivel','Observacion','Registro'];
   const esc = v => '"' + String(v ?? '').replace(/"/g, '""') + '"';
   const filas = ultimaConsulta.map(l => [
     l.fecha,
@@ -1688,7 +1751,7 @@ function exportarCSV(){
     `${l.horometros?.nave_desde ?? ''}-${l.horometros?.nave_hasta ?? ''}`,
     String(Number(l.valor).toFixed(1)).replace('.', ','),
     l.delta != null ? String(Number(l.delta).toFixed(1)).replace('.', ',') : '',
-    l.alerta ? 'SI' : 'NO',
+    l.delta == null ? '' : ({rojo:'ROJO',amarillo:'AMARILLO',verde:'VERDE'}[nivelDelta(l.delta)]),
     l.observacion ?? '',
     l.perfiles?.nombre ?? ''
   ].map(esc).join(';'));
