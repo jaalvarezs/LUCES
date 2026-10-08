@@ -110,7 +110,7 @@ create table if not exists public.lecturas (
   fecha date not null,
   valor numeric(12,1) not null check (valor >= 0),   -- valor acumulado del horómetro
   delta numeric(12,1),                                -- horas desde la lectura anterior (calculado)
-  alerta boolean not null default false,              -- true si delta < 2 h (calculado)
+  alerta boolean not null default false,              -- true si delta < 1.5 h = ROJO (calculado; amarillo 1.5–2 h lo pinta la app)
   observacion text,
   usuario_id uuid not null references auth.users(id),
   created_at timestamptz not null default now(),
@@ -122,7 +122,7 @@ create index if not exists idx_lecturas_alerta on public.lecturas (alerta) where
 
 -- Umbral de alerta (horas mínimas esperadas entre lecturas consecutivas)
 create or replace function public.umbral_alerta_horas()
-returns numeric language sql immutable as $$ select 2.0::numeric $$;
+returns numeric language sql immutable as $$ select 1.5::numeric $$;
 
 -- Trigger: calcular delta, marcar alerta y exigir observación
 create or replace function public.calcular_delta_lectura()
@@ -155,7 +155,7 @@ begin
 
   -- Si hay alerta, la observación es obligatoria
   if new.alerta and (new.observacion is null or btrim(new.observacion) = '') then
-    raise exception 'ALERTA: el registro indica %.1f horas de luz (menor a 2 h). Debe escribir una observación.', new.delta;
+    raise exception 'ALERTA: el registro indica % horas de luz (menor a 1.5 h). Debe escribir una observación.', round(new.delta, 1);
   end if;
 
   return new;
