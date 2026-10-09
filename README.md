@@ -8,7 +8,7 @@ sincroniza sola al recuperar conexión.
 
 - App publicada: https://jaalvarezs.github.io/LUCES/
 - Base de datos: Supabase (proyecto `horometros_fotoperiodo`)
-- Versión actual: **v2026.10.09-2** (se ve en la pantalla de inicio de sesión)
+- Versión actual: **v2026.10.09-3** (se ve en la pantalla de inicio de sesión)
 
 ---
 
@@ -21,7 +21,7 @@ sincroniza sola al recuperar conexión.
 | Luz nocturna | Tipo de cama (Producción/Propagación), bloque, cama, lado A/B, fecha y hora, 5 mediciones (inicio, mitad, final, entre 2 guirnaldas, entre 4 bombillos). Hora automática. Bajo la referencia exige observación. Ver protocolo abajo. |
 | Sin internet | Lecturas, luz, justificaciones y GPS quedan en el equipo y suben solos. Si algo no sube, aparece en un panel rojo en **Pendientes**. |
 | Pendientes | Bloques sin registrar, tiempo estimado de recorrido y justificación de los no recorridos. |
-| Lecturas (dashboard) | Filtros por fecha, bloque, horómetro y nivel; mapa del recorrido del operario; exportación CSV. |
+| Lecturas (dashboard) | Filtros por fecha, bloque, horómetro y nivel; mapa del recorrido del operario. En pantalla se ven las 500 lecturas más recientes; el **CSV trae el rango completo** con los mismos filtros (sin fecha "Desde": los últimos 6 meses). |
 | Horómetros y bloques | Crear, editar rango de naves (sin solapes), pausar/reactivar, capturar GPS del bloque. |
 | Tema día / noche | Botón ☀/☾ en la cabecera. |
 
@@ -115,12 +115,17 @@ el momento real en que llegó el registro (`created_at`).
 | `UMBRAL_VERDE` | 2 | Desde este valor la noche es verde |
 | `UMBRAL_ROJO` | 1.5 | Por debajo es rojo (alerta + observación). Si se cambia, cambiar también `umbral_alerta_horas()` en Supabase |
 | `HORAS_ESPERADAS` | 2 | Noche completa (barra al 100 %) |
+| `LIMITE_PANTALLA` | 500 | Lecturas que se muestran en el dashboard |
+| `MESES_CSV` | 6 | Meses que exporta el CSV cuando no se elige fecha "Desde" |
 | `REF_LUZ` | producción 1.2 · propagación 1.5 | µmol/m²/s mínimo en luz nocturna. Si se cambia, cambiar también `referencia_luz()` en Supabase |
 | `HORA_INICIO_REGISTRO` / `HORA_FIN_REGISTRO` | 6 / 14 | Ventana de registro (6 a.m. – 2 p.m.) |
 | `HORA_AVISO_PENDIENTES` | 13 | Aviso de bloques sin registrar (1 p.m.) |
 | `VEL_CAMINATA_KMH` / `MIN_POR_BLOQUE` | 4 / 3 | Estimación del tiempo de recorrido |
 
 ## Historial
+
+- **v2026.10.09-3** — El CSV ya no se corta en 500: descarga por paquetes de 1.000 todo el rango
+  filtrado (por defecto los últimos 6 meses). Aviso en pantalla cuando se llega al tope de 500.
 
 - **v2026.10.09** — Luz nocturna con el protocolo nuevo: inicio, mitad, final, entre 2 guirnaldas y
   entre 4 bombillos; referencia 1.2 (producción) o 1.5 (propagación); hora automática que se

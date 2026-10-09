@@ -287,7 +287,7 @@
             <option value="amarillos">Solo amarillas</option>
           </select>
         </div>
-        <div style="display:flex;align-items:flex-end"><button class="btn" style="margin-top:0" onclick="exportarCSV()">⬇ Exportar CSV</button></div>
+        <div style="display:flex;align-items:flex-end"><button class="btn" id="btnCSV" style="margin-top:0" onclick="exportarCSV()">⬇ Exportar CSV</button></div>
       </div>
     </div>
     <div class="resumenDia">
@@ -296,6 +296,7 @@
       <div class="kpi"><div class="num" style="color:var(--rojo)" id="kpiAlert">0</div><div class="lbl" id="kpiAlertLbl">Alertas (rojo)</div></div>
       <div class="kpi"><div class="num" style="color:var(--verde)" id="kpiOk">—</div><div class="lbl" id="kpiOkLbl">% en verde</div></div>
     </div>
+    <div id="avisoTope" class="horaHint" style="display:none;margin:-4px 2px 12px"></div>
     <div class="tarjeta">
       <h2 style="margin-top:0">🚶 Recorrido del operario</h2>
       <div class="fila">
@@ -381,6 +382,8 @@ function nivelDelta(d){
   if(d < UMBRAL_VERDE) return 'amarillo';
   return 'verde';
 }
+const LIMITE_PANTALLA = 500;   // lecturas que se muestran en el dashboard (las más recientes)
+const MESES_CSV = 6;           // el CSV trae todo el rango filtrado; sin fecha "Desde", los últimos 6 meses
 const HORAS_ESPERADAS = 2;     // delta esperado por noche (barra al 100%)
 const VEL_CAMINATA_KMH = 4;    // velocidad para estimar tiempo de recorrido
 const MIN_POR_BLOQUE = 3;      // minutos estimados de registro por bloque
@@ -393,7 +396,7 @@ const NOMBRE_TIPO_LUZ = { produccion: 'Producción', propagacion: 'Propagación'
 const UMBRAL_LUZ = 1.5;           // referencia de los registros antiguos de 5 puntos
 // Súbela cada vez que entregues una versión nueva — así se puede confirmar
 // a simple vista, desde la app, cuál versión quedó instalada en cada celular.
-const VERSION_APP = 'v2026.10.09-2';   // luz nocturna: 5 puntos (inicio/mitad/final + entre guirnaldas + entre 4 bombillos), ref. producción 1.2 / propagación 1.5
+const VERSION_APP = 'v2026.10.09-3';   // luz nocturna: 5 puntos (inicio/mitad/final + entre guirnaldas + entre 4 bombillos), ref. producción 1.2 / propagación 1.5
 
 const db = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
 
@@ -1509,40 +1512,86 @@ function rangoRapido(tipo){
   cargarAlertas();
 }
 
+/* Filtros del dashboard de horómetros (se resuelven una sola vez) */
+async function filtrosHoro(){
+  const f = {
+    desde: $('alDesde').value, hasta: $('alHasta').value,
+    bloqueId: $('alBloque').value,      // '' = todos
+    horoId: $('alHorometro').value,     // '' = todos
+    filtro: $('alFiltro').value,
+    ids: null
+  };
+  if(!f.horoId && f.bloqueId){
+    // Se filtra por lista de IDs de horómetro (no por el embed) para evitar
+    // el join !inner anidado, que en algunos casos devuelve 0 filas sin error.
+    let ids = lsGet('cacheTodosHorometros', []).filter(h => h.bloque_id === Number(f.bloqueId)).map(h => h.id);
+    if(!ids.length){
+      const { data: hs } = await db.from('horometros').select('id').eq('bloque_id', Number(f.bloqueId));
+      ids = (hs||[]).map(h => h.id);
+    }
+    f.ids = ids;
+  }
+  return f;
+}
+
+/* Consulta de lecturas con los filtros (sin límite: quien la usa decide limit o range) */
+function consultaHoro(f, desde){
+  let q = db.from('lecturas')
+    .select('*, horometros(nombre, nave_desde, nave_hasta, bloque_id, bloques(codigo))')
+    .order('fecha', { ascending:false }).order('horometro_id');
+  if(desde)  q = q.gte('fecha', desde);
+  if(f.hasta) q = q.lte('fecha', f.hasta);
+  if(f.filtro === 'alertas')   q = q.eq('alerta', true);                          // rojo (< 1.5 h)
+  if(f.filtro === 'amarillos') q = q.gte('delta', UMBRAL_ROJO).lt('delta', UMBRAL_VERDE);
+  if(f.filtro === 'novedades') q = q.lt('delta', UMBRAL_VERDE);                  // rojo + amarillo
+  if(f.horoId) q = q.eq('horometro_id', Number(f.horoId));
+  else if(f.ids) q = f.ids.length ? q.in('horometro_id', f.ids) : q.eq('horometro_id', -1);  // sin horómetros → sin resultados
+  return q;
+}
+
+/* Trae TODAS las filas de una consulta en paquetes de 1.000 (Supabase entrega
+   máx. ~1.000 por petición). Sigue pidiendo hasta recibir un paquete vacío,
+   así funciona aunque el máximo del servidor sea menor. */
+async function traerTodo(crearConsulta, alAvanzar){
+  const PAQ = 1000, filas = [];
+  for(let i = 0; i < 300; i++){            // tope de seguridad: 300.000 filas
+    const { data, error } = await crearConsulta().range(filas.length, filas.length + PAQ - 1);
+    if(error) throw error;
+    if(!data || !data.length) break;
+    filas.push(...data);
+    if(alAvanzar) alAvanzar(filas.length);
+  }
+  return filas;
+}
+
+function restarMesesISO(iso, n){
+  const [y, m, d] = iso.split('-').map(Number);
+  return new Date(Date.UTC(y, m - 1 - n, d)).toISOString().slice(0, 10);
+}
+
+async function nombresPerfiles(){
+  const { data } = await db.from('perfiles').select('id, nombre');
+  const m = {}; (data || []).forEach(p => { m[p.id] = p.nombre; });
+  return m;
+}
+
+function pintarAvisoTope(total, tipo){
+  const el = $('avisoTope');
+  if(total >= LIMITE_PANTALLA){
+    el.style.display = 'block';
+    el.textContent = `ℹ En pantalla: las ${LIMITE_PANTALLA} ${tipo} más recientes (los indicadores se calculan sobre ellas). El CSV trae el rango completo` +
+      ($('alDesde').value ? '.' : ` de los últimos ${MESES_CSV} meses.`);
+  } else el.style.display = 'none';
+}
+
 async function cargarAlertas(){
   if(modoDashboard === 'luz'){ return cargarLuzDashboard(); }
   if(!hayRed()){
     $('listaAlertas').innerHTML = '<div class="vacio">El historial de lecturas requiere conexión.</div>';
     return;
   }
-  const desde = $('alDesde').value, hasta = $('alHasta').value;
-  const bloqueId = $('alBloque').value;          // '' = todos
-  const horoId = $('alHorometro').value;         // '' = todos
-  const filtro = $('alFiltro').value;
-
-  let q = db.from('lecturas')
-    .select('*, horometros(nombre, nave_desde, nave_hasta, bloque_id, bloques(codigo))')
-    .order('fecha', { ascending:false }).order('horometro_id').limit(500);
-  if(desde) q = q.gte('fecha', desde);
-  if(hasta) q = q.lte('fecha', hasta);
-  if(filtro === 'alertas')   q = q.eq('alerta', true);                          // rojo (< 1.5 h)
-  if(filtro === 'amarillos') q = q.gte('delta', UMBRAL_ROJO).lt('delta', UMBRAL_VERDE);
-  if(filtro === 'novedades') q = q.lt('delta', UMBRAL_VERDE);                  // rojo + amarillo
-
-  if(horoId){
-    q = q.eq('horometro_id', Number(horoId));
-  } else if(bloqueId){
-    // Se filtra por lista de IDs de horómetro (no por el embed) para evitar
-    // el join !inner anidado, que en algunos casos devuelve 0 filas sin error.
-    let idsBloque = lsGet('cacheTodosHorometros', []).filter(h => h.bloque_id === Number(bloqueId)).map(h => h.id);
-    if(!idsBloque.length){
-      const { data: hs } = await db.from('horometros').select('id').eq('bloque_id', Number(bloqueId));
-      idsBloque = (hs||[]).map(h => h.id);
-    }
-    q = idsBloque.length ? q.in('horometro_id', idsBloque) : q.eq('horometro_id', -1); // sin horómetros → sin resultados
-  }
-
-  const { data, error } = await q;
+  const f = await filtrosHoro();
+  const { data, error } = await consultaHoro(f, f.desde).limit(LIMITE_PANTALLA);
   if(error){ aviso(error.message, true); return; }
 
   // lecturas.usuario_id no tiene relación directa con perfiles para PostgREST
@@ -1556,6 +1605,7 @@ async function cargarAlertas(){
   ultimaConsulta = data || [];
 
   const total = (data||[]).length;
+  pintarAvisoTope(total, 'lecturas');
   const nAlertas = (data||[]).filter(l => nivelDelta(l.delta)==='rojo' && l.delta != null).length;
   const nAmarillos = (data||[]).filter(l => l.delta != null && nivelDelta(l.delta)==='amarillo').length;
   const conDelta = (data||[]).filter(l => l.delta != null).length;
@@ -1723,24 +1773,26 @@ async function toggleHorometro(id, activo, nombre, codBloque){
 }
 
 /* ------------------------- dashboard: luz nocturna ------------------------- */
+/* Consulta de luz nocturna con los filtros del dashboard (sin límite) */
+function consultaLuz(desde){
+  const hasta = $('alHasta').value, bloqueId = $('alBloque').value;
+  const soloAlertas = $('alFiltro').value !== 'todas';   // en luz: rojas/novedades = bajo referencia
+  let q = db.from('lecturas_luz')
+    .select('*, bloques(codigo)')
+    .order('medido_en', { ascending:false }).order('id');
+  if(desde) q = q.gte('medido_en', desde + 'T00:00:00-05:00');
+  if(hasta) q = q.lte('medido_en', hasta + 'T23:59:59-05:00');
+  if(soloAlertas) q = q.eq('bajo_umbral', true);
+  if(bloqueId) q = q.eq('bloque_id', Number(bloqueId));
+  return q;
+}
+
 async function cargarLuzDashboard(){
   if(!hayRed()){
     $('listaAlertas').innerHTML = '<div class="vacio">El historial de luz nocturna requiere conexión.</div>';
     return;
   }
-  const desde = $('alDesde').value, hasta = $('alHasta').value;
-  const bloqueId = $('alBloque').value;
-  const soloAlertas = $('alFiltro').value !== 'todas';   // en luz: rojas/novedades = bajo referencia
-
-  let q = db.from('lecturas_luz')
-    .select('*, bloques(codigo)')
-    .order('medido_en', { ascending:false }).limit(500);
-  if(desde) q = q.gte('medido_en', desde + 'T00:00:00-05:00');
-  if(hasta) q = q.lte('medido_en', hasta + 'T23:59:59-05:00');
-  if(soloAlertas) q = q.eq('bajo_umbral', true);
-  if(bloqueId) q = q.eq('bloque_id', Number(bloqueId));
-
-  const { data, error } = await q;
+  const { data, error } = await consultaLuz($('alDesde').value).limit(LIMITE_PANTALLA);
   if(error){ aviso(error.message, true); return; }
 
   // Nombres de quien registró (misma resolución aparte que en horómetros)
@@ -1751,6 +1803,7 @@ async function cargarLuzDashboard(){
   ultimaConsultaLuz = data || [];
   ultimaConsultaLuz.forEach(l => { l.registro = nombrePorId[l.usuario_id] ?? '—'; });
   const total = ultimaConsultaLuz.length;
+  pintarAvisoTope(total, 'lecturas de luz');
   const nBajos = ultimaConsultaLuz.filter(l => l.bajo_umbral).length;
   $('kpiLect').textContent = total;
   $('kpiAlert').textContent = nBajos;
@@ -1792,16 +1845,15 @@ async function cargarLuzDashboard(){
   }).join('');
 }
 
-function exportarCSVLuz(){
-  if(!ultimaConsultaLuz.length){ aviso('No hay lecturas de luz para exportar. Ajuste los filtros primero.', true); return; }
+function descargarCSVLuz(datos, desde, hasta){
   // Las columnas del formato anterior (5 puntos) solo se incluyen si el rango exportado tiene registros antiguos
-  const hayAntiguos = ultimaConsultaLuz.some(l => !l.tipo_cultivo);
+  const hayAntiguos = datos.some(l => !l.tipo_cultivo);
   const enc = ['Fecha y hora','Bloque','Cama','Lado','Tipo de cama','Referencia (umol/m2/s)','Inicio','Mitad','Final','Entre 2 guirnaldas','Entre 4 bombillos']
     .concat(hayAntiguos ? ['Anterior','Posterior','Bajo bombillo','Entre bombillo','Borde'] : [])
     .concat(['Bajo referencia','Observacion','Registro']);
   const esc = v => '"' + String(v ?? '').replace(/"/g, '""') + '"';
   const num = v => v == null ? '' : String(Number(v).toFixed(2)).replace('.', ',');
-  const filas = ultimaConsultaLuz.map(l => [
+  const filas = datos.map(l => [
     new Date(l.medido_en).toLocaleString('es-CO', {timeZone:'America/Bogota'}),
     l.bloques?.codigo ?? '',
     l.cama, l.lado,
@@ -1811,23 +1863,54 @@ function exportarCSVLuz(){
   ].concat(hayAntiguos ? [num(l.anterior), num(l.posterior), num(l.bajo_bombillo), num(l.entre_bombillo), num(l.borde)] : [])
    .concat([l.bajo_umbral ? 'SI' : 'NO', l.observacion ?? '', l.registro ?? ''])
    .map(esc).join(';'));
-  const csv = '\uFEFF' + enc.join(';') + '\n' + filas.join('\n');
+  guardarArchivoCSV(enc, filas, `luz_nocturna_${desde}_a_${hasta}.csv`);
+}
+
+/* Exportar CSV: mismos filtros de la pantalla pero SIN el tope de 500.
+   Si no hay fecha "Desde", trae los últimos MESES_CSV meses. */
+async function exportarCSV(){
+  if(!hayRed()){ aviso('Se requiere conexión para exportar el CSV.', true); return; }
+  const btn = $('btnCSV'), txt = btn.textContent;
+  const desde = $('alDesde').value || restarMesesISO(hoyISO(), MESES_CSV);
+  const hasta = $('alHasta').value || hoyISO();
+  btn.disabled = true; btn.textContent = '⏳ Preparando…';
+  try{
+    const avance = n => { btn.textContent = `⏳ ${n.toLocaleString('es-CO')}…`; };
+    const nombres = await nombresPerfiles();
+    let datos;
+    if(modoDashboard === 'luz'){
+      datos = await traerTodo(() => consultaLuz(desde), avance);
+      datos.forEach(l => { l.registro = nombres[l.usuario_id] ?? '—'; });
+    } else {
+      const f = await filtrosHoro();
+      datos = await traerTodo(() => consultaHoro(f, desde), avance);
+      datos.forEach(l => { l.perfiles = { nombre: nombres[l.usuario_id] || '—' }; });
+    }
+    if(!datos.length){ aviso('No hay lecturas para exportar con esos filtros.', true); return; }
+    if(modoDashboard === 'luz') descargarCSVLuz(datos, desde, hasta);
+    else descargarCSVHoro(datos, desde, hasta);
+    aviso(`⬇ ${datos.length.toLocaleString('es-CO')} lecturas exportadas (${desde} a ${hasta}).`);
+  } catch(e){
+    aviso('No se pudo exportar: ' + (e.message || e), true);
+  } finally {
+    btn.disabled = false; btn.textContent = txt;
+  }
+}
+
+function guardarArchivoCSV(enc, filas, nombre){
+  const csv = '\uFEFF' + enc.join(';') + '\n' + filas.join('\n');   // BOM para tildes en Excel
   const blob = new Blob([csv], { type: 'text/csv;charset=utf-8' });
   const a = document.createElement('a');
   a.href = URL.createObjectURL(blob);
-  const d = $('alDesde').value || 'inicio', h = $('alHasta').value || 'hoy';
-  a.download = `luz_nocturna_${d}_a_${h}.csv`;
-  a.click();
-  URL.revokeObjectURL(a.href);
-  aviso(`⬇ ${ultimaConsultaLuz.length} lecturas de luz exportadas a CSV.`);
+  a.download = nombre;
+  document.body.appendChild(a); a.click(); a.remove();
+  setTimeout(() => URL.revokeObjectURL(a.href), 2000);
 }
 
-function exportarCSV(){
-  if(modoDashboard === 'luz'){ return exportarCSVLuz(); }
-  if(!ultimaConsulta.length){ aviso('No hay datos para exportar. Ajuste los filtros y espere a que carguen las lecturas.', true); return; }
+function descargarCSVHoro(datos, desde, hasta){
   const enc = ['Fecha','Bloque','Horometro','Naves','Lectura (h)','Delta (h)','Nivel','Observacion','Registro'];
   const esc = v => '"' + String(v ?? '').replace(/"/g, '""') + '"';
-  const filas = ultimaConsulta.map(l => [
+  const filas = datos.map(l => [
     l.fecha,
     l.horometros?.bloques?.codigo ?? '',
     l.horometros?.nombre ?? '',
@@ -1838,15 +1921,7 @@ function exportarCSV(){
     l.observacion ?? '',
     l.perfiles?.nombre ?? ''
   ].map(esc).join(';'));
-  const csv = '\uFEFF' + enc.join(';') + '\n' + filas.join('\n');   // BOM para tildes en Excel
-  const blob = new Blob([csv], { type: 'text/csv;charset=utf-8' });
-  const a = document.createElement('a');
-  a.href = URL.createObjectURL(blob);
-  const d = $('alDesde').value || 'inicio', h = $('alHasta').value || 'hoy';
-  a.download = `lecturas_horometros_${d}_a_${h}.csv`;
-  a.click();
-  URL.revokeObjectURL(a.href);
-  aviso(`⬇ ${ultimaConsulta.length} registros exportados a CSV.`);
+  guardarArchivoCSV(enc, filas, `lecturas_horometros_${desde}_a_${hasta}.csv`);
 }
 
 /* ------------------------- mapa de recorrido ------------------------- */
