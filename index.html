@@ -92,6 +92,15 @@
   .barraLuz i.amarilla{background:var(--amarillo);box-shadow:0 0 8px var(--amarillo)}
   .barraLuz i.verde{background:var(--verde);box-shadow:0 0 8px var(--verde)}
   .barraLuz i.roja{background:var(--rojo);box-shadow:0 0 8px var(--rojo)}
+  .horaHint{font-size:11px;color:var(--texto2);margin-top:4px}
+  .horaHint button{background:none;border:none;color:var(--ambar);font:inherit;text-decoration:underline;cursor:pointer;padding:0}
+  .tiposLuz{display:flex;gap:8px;flex-wrap:wrap;margin-bottom:6px}
+  .tiposLuz .chip{flex:1;padding:10px 12px;font-size:13px}
+  .protocoloLuz{margin-top:12px;background:var(--panel2);border:1px solid var(--borde);border-radius:10px;padding:10px 12px;font-size:13px}
+  .protocoloLuz summary{cursor:pointer;font-weight:700;color:var(--ambar)}
+  .protocoloLuz ul{margin:8px 0 0;padding-left:18px;color:var(--texto2);line-height:1.45}
+  .protocoloLuz li{margin-bottom:4px}
+  .protocoloLuz b{color:var(--texto)}
   .obsCampo{display:none;margin-top:10px}
   .obsCampo.visible{display:block}
   .yaRegistrada{margin-top:10px;font-size:13px;color:var(--verde);background:var(--verde-suave);border-radius:10px;padding:10px 12px}
@@ -192,23 +201,39 @@
 
     <div id="registroLuz" style="display:none">
       <div class="tarjeta">
+        <label>Tipo de cama</label>
+        <div class="tiposLuz">
+          <button type="button" class="chip" id="tipoLuz-produccion" onclick="elegirTipoLuz('produccion')">🌼 Producción · 1.2</button>
+          <button type="button" class="chip" id="tipoLuz-propagacion" onclick="elegirTipoLuz('propagacion')">🌱 Propagación · 1.5</button>
+        </div>
         <div class="fila">
-          <div><label for="luzBloque">Bloque</label><select id="luzBloque"></select></div>
+          <div><label for="luzBloque">Bloque</label><select id="luzBloque" onchange="aplicarTipoGuardado()"></select></div>
           <div><label for="luzCama">Cama</label><input type="number" id="luzCama" min="1" class="mono" placeholder="ej. 64"></div>
           <div><label for="luzLado">Lado</label><select id="luzLado"><option value="A">A</option><option value="B">B</option></select></div>
         </div>
         <label for="luzFechaHora">Fecha y hora de la lectura</label>
-        <input type="datetime-local" id="luzFechaHora">
+        <input type="datetime-local" id="luzFechaHora" oninput="marcarHoraLuzManual()">
+        <div id="luzHoraHint" class="horaHint"></div>
+        <details class="protocoloLuz">
+          <summary>📏 Cómo medir</summary>
+          <ul>
+            <li><b>Inicio, mitad y final:</b> 3 mediciones a lo largo de la cama, en el sitio más oscuro.</li>
+            <li><b>Entre 2 guirnaldas:</b> punto intermedio entre dos guirnaldas.</li>
+            <li><b>Entre 4 bombillos:</b> punto intermedio entre cuatro bombillos.</li>
+            <li><b>Sensor:</b> horizontal, con extensor para no hacer sombra, a la altura del dosel de las plantas.</li>
+            <li><b>Referencia (≈ 10 foot-candles):</b> Producción 1.2 µmol/m²/s · Propagación 1.5 µmol/m²/s.</li>
+          </ul>
+        </details>
         <div class="fila" style="margin-top:4px">
-          <div><label for="luzAnterior">Anterior</label><input type="number" step="0.01" min="0" id="luzAnterior" class="mono luzVal" placeholder="0.00" oninput="revisarUmbralLuz()"></div>
-          <div><label for="luzPosterior">Posterior</label><input type="number" step="0.01" min="0" id="luzPosterior" class="mono luzVal" placeholder="0.00" oninput="revisarUmbralLuz()"></div>
+          <div><label for="luzInicio">Inicio</label><input type="number" step="0.01" min="0" id="luzInicio" class="mono luzVal" placeholder="0.00" inputmode="decimal" oninput="horaLuzAuto(); revisarUmbralLuz()"></div>
+          <div><label for="luzMitad">Mitad</label><input type="number" step="0.01" min="0" id="luzMitad" class="mono luzVal" placeholder="0.00" inputmode="decimal" oninput="horaLuzAuto(); revisarUmbralLuz()"></div>
+          <div><label for="luzFinal">Final</label><input type="number" step="0.01" min="0" id="luzFinal" class="mono luzVal" placeholder="0.00" inputmode="decimal" oninput="horaLuzAuto(); revisarUmbralLuz()"></div>
         </div>
         <div class="fila" style="margin-top:4px">
-          <div><label for="luzBajo">Bajo bombillo</label><input type="number" step="0.01" min="0" id="luzBajo" class="mono luzVal" placeholder="0.00" oninput="revisarUmbralLuz()"></div>
-          <div><label for="luzEntre">Entre bombillo</label><input type="number" step="0.01" min="0" id="luzEntre" class="mono luzVal" placeholder="0.00" oninput="revisarUmbralLuz()"></div>
-          <div><label for="luzBorde">Borde</label><input type="number" step="0.01" min="0" id="luzBorde" class="mono luzVal" placeholder="0.00" oninput="revisarUmbralLuz()"></div>
+          <div><label for="luzGuirnaldas">Entre 2 guirnaldas</label><input type="number" step="0.01" min="0" id="luzGuirnaldas" class="mono luzVal" placeholder="0.00" inputmode="decimal" oninput="horaLuzAuto(); revisarUmbralLuz()"></div>
+          <div><label for="luzBombillos">Entre 4 bombillos</label><input type="number" step="0.01" min="0" id="luzBombillos" class="mono luzVal" placeholder="0.00" inputmode="decimal" oninput="horaLuzAuto(); revisarUmbralLuz()"></div>
         </div>
-        <div style="font-size:12px;color:var(--texto2);margin-top:8px">Referencia mínima: <b class="mono" style="color:var(--ambar)">1.5 µmol/m²/s</b> en cada punto.</div>
+        <div id="refLuzTxt" style="font-size:12px;color:var(--texto2);margin-top:8px"></div>
         <div class="deltaPrevio" id="avisoLuz"></div>
         <div class="obsCampo" id="obsLuzWrap">
           <label for="obsLuz">Observación (obligatoria por valores bajo la referencia)</label>
@@ -362,10 +387,13 @@ const MIN_POR_BLOQUE = 3;      // minutos estimados de registro por bloque
 const HORA_INICIO_REGISTRO = 6;   // ventana laboral de registro: 6 a.m.
 const HORA_FIN_REGISTRO = 14;     // hasta las 2 p.m.
 const HORA_AVISO_PENDIENTES = 13; // a la 1 p.m. se alerta si hay bloques sin registrar
-const UMBRAL_LUZ = 1.5;           // µmol/m²/s mínimo esperado en cada punto de luz nocturna
+// Luz nocturna (µmol/m²/s mínimo en cada punto, ≈ 10 foot-candles). Debe coincidir con referencia_luz() en Supabase.
+const REF_LUZ = { produccion: 1.2, propagacion: 1.5 };
+const NOMBRE_TIPO_LUZ = { produccion: 'Producción', propagacion: 'Propagación' };
+const UMBRAL_LUZ = 1.5;           // referencia de los registros antiguos de 5 puntos
 // Súbela cada vez que entregues una versión nueva — así se puede confirmar
 // a simple vista, desde la app, cuál versión quedó instalada en cada celular.
-const VERSION_APP = 'v2026.10.08-2';   // semáforo de 3 niveles: verde ≥2 h, amarillo 1.5–2 h, rojo <1.5 h
+const VERSION_APP = 'v2026.10.09-2';   // luz nocturna: 5 puntos (inicio/mitad/final + entre guirnaldas + entre 4 bombillos), ref. producción 1.2 / propagación 1.5
 
 const db = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
 
@@ -1287,7 +1315,7 @@ function cambiarModoRegistro(m){
   $('registroHoro').style.display = m === 'horometros' ? 'block' : 'none';
   $('registroLuz').style.display = m === 'luz' ? 'block' : 'none';
   if(m === 'luz'){
-    if(!$('luzFechaHora').value) $('luzFechaHora').value = ahoraLocalBogota();
+    horaLuzAuto(true);
     poblarSelectorLuz();
   }
 }
@@ -1301,16 +1329,51 @@ function poblarSelectorLuz(){
   const previo = sel.value;
   sel.innerHTML = visibles.map(b => `<option value="${b.id}">Bloque ${b.codigo}</option>`).join('');
   if(previo && visibles.some(b => b.id === Number(previo))) sel.value = previo;
+  aplicarTipoGuardado();
+}
+
+/* Tipo de cama (producción / propagación). Se recuerda por bloque en este
+   equipo; la primera vez en cada bloque hay que elegirlo a mano. */
+let tipoLuz = null;
+function elegirTipoLuz(t, recordar = true){
+  tipoLuz = t;
+  ['produccion','propagacion'].forEach(k => $('tipoLuz-'+k).classList.toggle('activoChip', k === t));
+  if(recordar && t){
+    const mem = lsGet('tipoLuzPorBloque', {});
+    const b = $('luzBloque').value;
+    if(b){ mem[b] = t; lsSet('tipoLuzPorBloque', mem); }
+  }
+  $('refLuzTxt').innerHTML = t
+    ? `Referencia mínima (${NOMBRE_TIPO_LUZ[t]}): <b class="mono" style="color:var(--ambar)">${REF_LUZ[t].toFixed(1)} µmol/m²/s</b> en cada punto.`
+    : `<span style="color:var(--ambar)">Seleccione arriba si la cama es de <b>Producción</b> o de <b>Propagación</b>.</span>`;
+  revisarUmbralLuz();
+}
+function aplicarTipoGuardado(){
+  const mem = lsGet('tipoLuzPorBloque', {});
+  elegirTipoLuz(mem[$('luzBloque').value] || null, false);
+}
+
+/* Hora de la lectura: se llena sola con la hora actual y se va actualizando
+   mientras el operario digita las mediciones (queda la hora real de la medición).
+   Si el operario la corrige a mano, se respeta hasta que guarde. */
+let luzHoraManual = false;
+function horaLuzAuto(forzarTexto){
+  if(!luzHoraManual) $('luzFechaHora').value = ahoraLocalBogota();
+  if(forzarTexto || !luzHoraManual) pintarHintHoraLuz();
+}
+function marcarHoraLuzManual(){ luzHoraManual = true; pintarHintHoraLuz(); }
+function volverHoraLuzAuto(){ luzHoraManual = false; horaLuzAuto(true); }
+function pintarHintHoraLuz(){
+  $('luzHoraHint').innerHTML = luzHoraManual
+    ? '✎ Hora corregida a mano. <button type="button" onclick="volverHoraLuzAuto()">Volver a hora automática</button>'
+    : '🕒 Automática: se actualiza al digitar las mediciones. Corríjala solo si registra una medición tomada antes.';
 }
 
 function valoresLuz(){
-  return {
-    anterior: parseFloat($('luzAnterior').value),
-    posterior: parseFloat($('luzPosterior').value),
-    bajo_bombillo: parseFloat($('luzBajo').value),
-    entre_bombillo: parseFloat($('luzEntre').value),
-    borde: parseFloat($('luzBorde').value)
-  };
+  // Redondeo a 2 decimales, igual que la base de datos (numeric(6,2))
+  const n = id => { const x = parseFloat($(id).value); return isNaN(x) ? NaN : Math.round(x * 100) / 100; };
+  return { inicio: n('luzInicio'), mitad: n('luzMitad'), final: n('luzFinal'),
+           entre_guirnaldas: n('luzGuirnaldas'), entre_cuatro_bombillos: n('luzBombillos') };
 }
 
 function revisarUmbralLuz(){
@@ -1319,16 +1382,17 @@ function revisarUmbralLuz(){
   const llenos = Object.values(v).filter(x => !isNaN(x));
   caja.className = 'deltaPrevio';
   obs.classList.remove('visible');
-  if(!llenos.length) return;
-  const bajos = Object.entries(v).filter(([_, x]) => !isNaN(x) && x < UMBRAL_LUZ);
+  if(!llenos.length || !tipoLuz) return;
+  const ref = REF_LUZ[tipoLuz];
+  const bajos = Object.entries(v).filter(([_, x]) => !isNaN(x) && x < ref);
   if(bajos.length){
-    const nombres = { anterior:'Anterior', posterior:'Posterior', bajo_bombillo:'Bajo bombillo', entre_bombillo:'Entre bombillo', borde:'Borde' };
+    const nombres = { inicio:'Inicio', mitad:'Mitad', final:'Final', entre_guirnaldas:'Entre 2 guirnaldas', entre_cuatro_bombillos:'Entre 4 bombillos' };
     caja.classList.add('mal');
-    caja.textContent = `⚠ Bajo la referencia de ${UMBRAL_LUZ} µmol/m²/s: ${bajos.map(([k]) => nombres[k]).join(', ')}. Escriba una observación.`;
+    caja.textContent = `⚠ Bajo la referencia de ${ref.toFixed(1)} µmol/m²/s (${NOMBRE_TIPO_LUZ[tipoLuz]}): ${bajos.map(([k]) => nombres[k]).join(', ')}. Escriba una observación.`;
     obs.classList.add('visible');
   } else if(llenos.length === 5){
     caja.classList.add('ok');
-    caja.textContent = `✔ Los 5 puntos cumplen la referencia mínima de ${UMBRAL_LUZ} µmol/m²/s.`;
+    caja.textContent = `✔ Los 5 puntos cumplen la referencia de ${ref.toFixed(1)} µmol/m²/s (${NOMBRE_TIPO_LUZ[tipoLuz]}).`;
   }
 }
 
@@ -1342,23 +1406,26 @@ async function guardarLecturaLuz(){
   const obsEl = $('obsLuz');
   const observacion = obsEl.value.trim() ? obsEl.value.trim() : null;
 
+  if(!tipoLuz){ aviso('Seleccione el tipo de cama: Producción o Propagación.', true); return; }
   if(!bloqueId){ aviso('Seleccione el bloque.', true); return; }
   if(isNaN(cama) || cama < 1){ aviso('Ingrese el número de cama.', true); return; }
   if(!fh){ aviso('Indique la fecha y hora de la lectura.', true); return; }
-  if(Object.values(v).some(x => isNaN(x) || x < 0)){ aviso('Complete las 5 mediciones con valores válidos.', true); return; }
+  if(Object.values(v).some(x => isNaN(x) || x < 0)){ aviso('Complete las 5 mediciones (inicio, mitad, final, entre 2 guirnaldas y entre 4 bombillos) con valores válidos.', true); return; }
 
-  const hayBajos = Object.values(v).some(x => x < UMBRAL_LUZ);
+  const ref = REF_LUZ[tipoLuz];
+  const hayBajos = Object.values(v).some(x => x < ref);
   if(hayBajos && !observacion){
     $('obsLuzWrap').classList.add('visible');
-    aviso(`⚠ Hay valores bajo ${UMBRAL_LUZ} µmol/m²/s: debe escribir una observación antes de guardar.`, true);
+    aviso(`⚠ Hay valores bajo ${ref.toFixed(1)} µmol/m²/s: debe escribir una observación antes de guardar.`, true);
     return;
   }
 
   const fila = {
     bloque_id: bloqueId, cama, lado,
     medido_en: fh + ':00-05:00',   // hora de Colombia
-    anterior: v.anterior, posterior: v.posterior,
-    bajo_bombillo: v.bajo_bombillo, entre_bombillo: v.entre_bombillo, borde: v.borde,
+    tipo_cultivo: tipoLuz,
+    inicio: v.inicio, mitad: v.mitad, final: v.final,
+    entre_guirnaldas: v.entre_guirnaldas, entre_cuatro_bombillos: v.entre_cuatro_bombillos,
     observacion, usuario_id: perfil.id
   };
 
@@ -1373,6 +1440,8 @@ async function guardarLecturaLuz(){
       } else if(error.message.includes('observación') || error.message.includes('µmol')){
         $('obsLuzWrap').classList.add('visible');
         aviso('⚠ Valores bajo la referencia: debe escribir una observación.', true);
+      } else if(/tipo_cultivo|inicio|mitad|final|entre_guirnaldas|entre_cuatro|formato_valido|schema cache/i.test(error.message)){
+        aviso('La base de datos aún no tiene el protocolo nuevo de luz (falta ejecutar actualizacion_v11.sql). Avise al administrador.', true);
       } else aviso('Error: ' + error.message, true);
       return;
     }
@@ -1386,10 +1455,10 @@ async function guardarLecturaLuz(){
     aviso('⏳ Sin conexión: lectura de luz guardada en el dispositivo.');
   }
 
-  // Limpiar solo mediciones y observación; conservar bloque/cama/lado para el siguiente punto
-  ['luzAnterior','luzPosterior','luzBajo','luzEntre','luzBorde'].forEach(id => $(id).value = '');
+  // Limpiar solo mediciones y observación; conservar tipo/bloque/cama/lado para la siguiente cama
+  ['luzInicio','luzMitad','luzFinal','luzGuirnaldas','luzBombillos'].forEach(id => $(id).value = '');
   $('obsLuz').value = '';
-  $('luzFechaHora').value = ahoraLocalBogota();
+  luzHoraManual = false; horaLuzAuto(true);
   revisarUmbralLuz();
   registrarPosicion('lectura');
   actualizarBanner();
@@ -1404,7 +1473,7 @@ function cambiarModoDashboard(m){
   $('tabDashHoro').classList.toggle('activoChip', m === 'horometros');
   $('tabDashLuz').classList.toggle('activoChip', m === 'luz');
   $('filtroHoroWrap').style.display = m === 'horometros' ? 'block' : 'none';
-  $('kpiOkLbl').textContent = m === 'horometros' ? '% en verde' : '% puntos OK';
+  $('kpiOkLbl').textContent = m === 'horometros' ? '% en verde' : '% camas OK';
   $('kpiAlertLbl').textContent = m === 'horometros' ? 'Alertas (rojo)' : 'Bajo ref.';
   $('kpiAmarWrap').style.display = m === 'horometros' ? '' : 'none';
   // En luz no hay amarillo: se ocultan esas opciones y "rojas" pasa a "bajo referencia"
@@ -1680,6 +1749,7 @@ async function cargarLuzDashboard(){
   (perfilesAll || []).forEach(p => { nombrePorId[p.id] = p.nombre; });
 
   ultimaConsultaLuz = data || [];
+  ultimaConsultaLuz.forEach(l => { l.registro = nombrePorId[l.usuario_id] ?? '—'; });
   const total = ultimaConsultaLuz.length;
   const nBajos = ultimaConsultaLuz.filter(l => l.bajo_umbral).length;
   $('kpiLect').textContent = total;
@@ -1692,42 +1762,55 @@ async function cargarLuzDashboard(){
   }
 
   const fmtHora = t => new Date(t).toLocaleString('es-CO', {day:'2-digit', month:'2-digit', year:'numeric', hour:'2-digit', minute:'2-digit', timeZone:'America/Bogota'});
-  const celda = (nombre, valor) => {
-    const bajo = Number(valor) < UMBRAL_LUZ;
+  const celda = (nombre, valor, ref) => {
+    const bajo = Number(valor) < ref;
     return `<div style="text-align:center"><div style="font-size:10px;color:var(--texto2);text-transform:uppercase;letter-spacing:.04em">${nombre}</div><div class="mono" style="font-weight:700;color:${bajo ? 'var(--rojo)' : 'var(--verde)'}">${Number(valor).toFixed(2)}</div></div>`;
   };
 
-  $('listaAlertas').innerHTML = ultimaConsultaLuz.map(l => `
+  $('listaAlertas').innerHTML = ultimaConsultaLuz.map(l => {
+    const ref = Number(l.referencia ?? UMBRAL_LUZ);
+    const nuevo = !!l.tipo_cultivo;
+    const tipoTxt = nuevo
+      ? `${l.tipo_cultivo === 'propagacion' ? '🌱' : '🌼'} ${NOMBRE_TIPO_LUZ[l.tipo_cultivo]} · ref ${ref.toFixed(1)}`
+      : `Formato anterior (5 puntos) · ref ${ref.toFixed(1)}`;
+    const puntos = nuevo
+      ? [['Inicio', l.inicio], ['Mitad', l.mitad], ['Final', l.final], ['Entre guirn.', l.entre_guirnaldas], ['Entre 4 bomb.', l.entre_cuatro_bombillos]].filter(([_, x]) => x != null)
+      : [['Anterior', l.anterior], ['Posterior', l.posterior], ['Bajo bomb.', l.bajo_bombillo], ['Entre bomb.', l.entre_bombillo], ['Borde', l.borde]];
+    return `
     <div class="alertaItem" style="border-left-color:${l.bajo_umbral ? 'var(--rojo)' : 'var(--verde)'}">
       <div class="alertaCab">
         <span>Bloque <b>${l.bloques?.codigo ?? '?'}</b> · Cama ${l.cama}${l.lado}${l.bajo_umbral ? ' · ⚠' : ''}</span>
         <span class="mono">${fmtHora(l.medido_en)}</span>
       </div>
-      <div style="display:grid;grid-template-columns:repeat(5,1fr);gap:6px;margin-top:10px">
-        ${celda('Anterior', l.anterior)}
-        ${celda('Posterior', l.posterior)}
-        ${celda('Bajo bomb.', l.bajo_bombillo)}
-        ${celda('Entre bomb.', l.entre_bombillo)}
-        ${celda('Borde', l.borde)}
+      <div style="font-size:12px;color:var(--texto2);margin-top:4px">${tipoTxt} µmol/m²/s</div>
+      <div style="display:grid;grid-template-columns:repeat(${puntos.length},1fr);gap:6px;margin-top:10px">
+        ${puntos.map(([n, val]) => celda(n, val, ref)).join('')}
       </div>
-      <div style="font-size:12px;color:var(--texto2);margin-top:8px">Registró: ${nombrePorId[l.usuario_id] ?? '—'}</div>
+      <div style="font-size:12px;color:var(--texto2);margin-top:8px">Registró: ${l.registro}</div>
       ${l.observacion ? `<div class="alertaObs">📝 ${l.observacion}</div>` : ''}
-    </div>`).join('');
+    </div>`;
+  }).join('');
 }
 
 function exportarCSVLuz(){
   if(!ultimaConsultaLuz.length){ aviso('No hay lecturas de luz para exportar. Ajuste los filtros primero.', true); return; }
-  const enc = ['Fecha y hora','Bloque','Cama','Lado','Anterior','Posterior','Bajo bombillo','Entre bombillo','Borde','Bajo referencia','Observacion'];
+  // Las columnas del formato anterior (5 puntos) solo se incluyen si el rango exportado tiene registros antiguos
+  const hayAntiguos = ultimaConsultaLuz.some(l => !l.tipo_cultivo);
+  const enc = ['Fecha y hora','Bloque','Cama','Lado','Tipo de cama','Referencia (umol/m2/s)','Inicio','Mitad','Final','Entre 2 guirnaldas','Entre 4 bombillos']
+    .concat(hayAntiguos ? ['Anterior','Posterior','Bajo bombillo','Entre bombillo','Borde'] : [])
+    .concat(['Bajo referencia','Observacion','Registro']);
   const esc = v => '"' + String(v ?? '').replace(/"/g, '""') + '"';
-  const num = v => String(Number(v).toFixed(2)).replace('.', ',');
+  const num = v => v == null ? '' : String(Number(v).toFixed(2)).replace('.', ',');
   const filas = ultimaConsultaLuz.map(l => [
     new Date(l.medido_en).toLocaleString('es-CO', {timeZone:'America/Bogota'}),
     l.bloques?.codigo ?? '',
     l.cama, l.lado,
-    num(l.anterior), num(l.posterior), num(l.bajo_bombillo), num(l.entre_bombillo), num(l.borde),
-    l.bajo_umbral ? 'SI' : 'NO',
-    l.observacion ?? ''
-  ].map(esc).join(';'));
+    l.tipo_cultivo ? NOMBRE_TIPO_LUZ[l.tipo_cultivo] : 'Formato anterior',
+    num(l.referencia ?? UMBRAL_LUZ),
+    num(l.inicio), num(l.mitad), num(l.final), num(l.entre_guirnaldas), num(l.entre_cuatro_bombillos)
+  ].concat(hayAntiguos ? [num(l.anterior), num(l.posterior), num(l.bajo_bombillo), num(l.entre_bombillo), num(l.borde)] : [])
+   .concat([l.bajo_umbral ? 'SI' : 'NO', l.observacion ?? '', l.registro ?? ''])
+   .map(esc).join(';'));
   const csv = '\uFEFF' + enc.join(';') + '\n' + filas.join('\n');
   const blob = new Blob([csv], { type: 'text/csv;charset=utf-8' });
   const a = document.createElement('a');
