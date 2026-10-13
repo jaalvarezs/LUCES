@@ -396,7 +396,7 @@ const NOMBRE_TIPO_LUZ = { produccion: 'Producción', propagacion: 'Propagación'
 const UMBRAL_LUZ = 1.5;           // referencia de los registros antiguos de 5 puntos
 // Súbela cada vez que entregues una versión nueva — así se puede confirmar
 // a simple vista, desde la app, cuál versión quedó instalada en cada celular.
-const VERSION_APP = 'v2026.10.09-3';   // luz nocturna: 5 puntos (inicio/mitad/final + entre guirnaldas + entre 4 bombillos), ref. producción 1.2 / propagación 1.5
+const VERSION_APP = 'v2026.10.13-1';   // luz nocturna: 5 puntos (inicio/mitad/final + entre guirnaldas + entre 4 bombillos), ref. producción 1.2 / propagación 1.5
 
 const db = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
 
@@ -1908,13 +1908,15 @@ function guardarArchivoCSV(enc, filas, nombre){
 }
 
 function descargarCSVHoro(datos, desde, hasta){
-  const enc = ['Fecha','Bloque','Horometro','Naves','Lectura (h)','Delta (h)','Nivel','Observacion','Registro'];
+  // Naves en dos columnas numéricas: "1-5" en una sola celda Excel lo convierte en fecha (01-may)
+  const enc = ['Fecha','Bloque','Horometro','Nave desde','Nave hasta','Lectura (h)','Delta (h)','Nivel','Observacion','Registro'];
   const esc = v => '"' + String(v ?? '').replace(/"/g, '""') + '"';
   const filas = datos.map(l => [
     l.fecha,
     l.horometros?.bloques?.codigo ?? '',
     l.horometros?.nombre ?? '',
-    `${l.horometros?.nave_desde ?? ''}-${l.horometros?.nave_hasta ?? ''}`,
+    l.horometros?.nave_desde ?? '',
+    l.horometros?.nave_hasta ?? '',
     String(Number(l.valor).toFixed(1)).replace('.', ','),
     l.delta != null ? String(Number(l.delta).toFixed(1)).replace('.', ',') : '',
     l.delta == null ? '' : ({rojo:'ROJO',amarillo:'AMARILLO',verde:'VERDE'}[nivelDelta(l.delta)]),
