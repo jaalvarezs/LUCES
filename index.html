@@ -17,6 +17,7 @@
     --ambar:#ffb640; --ambar-suave:rgba(255,182,64,.12);
     --amarillo:#f5d90a; --amarillo-suave:rgba(245,217,10,.14);
     --rojo:#ff6b57; --rojo-suave:rgba(255,107,87,.12);
+    --morado:#c58cff; --morado-suave:rgba(197,140,255,.15);
     --verde:#5fd68a; --verde-suave:rgba(95,214,138,.10);
     --sombra:rgba(0,0,0,.5);
   }
@@ -27,6 +28,7 @@
     --ambar:#c47d00; --ambar-suave:rgba(196,125,0,.12);
     --amarillo:#a68a00; --amarillo-suave:rgba(214,180,0,.18);
     --rojo:#c92f1c; --rojo-suave:rgba(201,47,28,.10);
+    --morado:#7b2fbf; --morado-suave:rgba(123,47,191,.10);
     --verde:#1e7d45; --verde-suave:rgba(30,125,69,.10);
     --sombra:rgba(30,40,32,.15);
   }
@@ -86,6 +88,11 @@
   .deltaPrevio{margin-top:10px;border-radius:10px;padding:10px 12px;font-size:13px;display:none}
   .deltaPrevio.ok{display:block;background:var(--verde-suave);color:var(--verde)}
   .deltaPrevio.amarillo{display:block;background:var(--amarillo-suave);color:var(--amarillo);font-weight:700}
+  input.luzAtipica{border:2px solid var(--morado) !important;background:var(--morado-suave) !important;color:var(--morado) !important;font-weight:800}
+  .avisoAtipico{display:none;margin-top:10px;border-radius:10px;padding:10px 12px;font-size:13px;font-weight:700;background:var(--morado-suave);color:var(--morado);border:1px solid var(--morado)}
+  .avisoAtipico button{background:var(--morado);color:#fff;border:none;border-radius:6px;padding:3px 8px;margin-left:4px;font:inherit;font-size:12px;cursor:pointer}
+  .confAtipico{display:none;margin-top:8px;font-size:13px;color:var(--texto);align-items:center;gap:8px;text-transform:none;letter-spacing:0;font-weight:600}
+  .confAtipico input{width:auto;margin:0}
   .deltaPrevio.mal{display:block;background:var(--rojo-suave);color:var(--rojo);font-weight:700}
   .barraLuz{height:6px;border-radius:3px;background:var(--fondo);margin-top:8px;overflow:hidden}
   .barraLuz i{display:block;height:100%;background:var(--ambar);box-shadow:0 0 8px var(--ambar);border-radius:3px;transition:width .3s}
@@ -234,9 +241,11 @@
           <div><label for="luzBombillos">Entre 4 bombillos</label><input type="number" step="0.01" min="0" id="luzBombillos" class="mono luzVal" placeholder="0.00" inputmode="decimal" oninput="horaLuzAuto(); revisarUmbralLuz()"></div>
         </div>
         <div id="refLuzTxt" style="font-size:12px;color:var(--texto2);margin-top:8px"></div>
+        <div class="avisoAtipico" id="avisoAtipico"></div>
+        <label class="confAtipico" id="confAtipicoWrap"><input type="checkbox" id="confAtipico" onchange="revisarUmbralLuz()"> Volví a medir en ese punto y el valor es correcto</label>
         <div class="deltaPrevio" id="avisoLuz"></div>
         <div class="obsCampo" id="obsLuzWrap">
-          <label for="obsLuz">Observación (obligatoria por valores bajo la referencia)</label>
+          <label for="obsLuz" id="obsLuzLbl">Observación (obligatoria)</label>
           <textarea id="obsLuz" rows="2" placeholder="ej. Bombillo fundido en cama 64, guirnalda floja…"></textarea>
         </div>
         <button class="guardarMini" id="btnGuardarLuz" onclick="guardarLecturaLuz()">Guardar lectura de luz</button>
@@ -394,9 +403,15 @@ const HORA_AVISO_PENDIENTES = 13; // a la 1 p.m. se alerta si hay bloques sin re
 const REF_LUZ = { produccion: 1.2, propagacion: 1.5 };
 const NOMBRE_TIPO_LUZ = { produccion: 'Producción', propagacion: 'Propagación' };
 const UMBRAL_LUZ = 1.5;           // referencia de los registros antiguos de 5 puntos
+/* Valores atípicos en luz nocturna (bombillos de 15 W · 220 V · 1700 lm).
+   Un bombillo de 1700 lm da ≈ 1.5 µmol/m²/s a 1 m justo debajo y ≈ 3 a 0.7 m; en los puntos
+   de medición (entre guirnaldas / entre bombillos) valores sobre 5 no son físicamente esperables. */
+const LUZ_MAX_PLAUSIBLE = 5.0;    // µmol/m²/s: por encima, el valor se marca como atípico
+const LUZ_FACTOR_ALTO = 3;        // atípico si supera 3 veces la mediana de los otros puntos de la cama
+const LUZ_FACTOR_BAJO = 4;        // atípico si es menor que la mediana de los otros puntos / 4
 // Súbela cada vez que entregues una versión nueva — así se puede confirmar
 // a simple vista, desde la app, cuál versión quedó instalada en cada celular.
-const VERSION_APP = 'v2026.10.13-1';   // luz nocturna: 5 puntos (inicio/mitad/final + entre guirnaldas + entre 4 bombillos), ref. producción 1.2 / propagación 1.5
+const VERSION_APP = 'v2026.11.03-1';   // luz nocturna: 5 puntos (inicio/mitad/final + entre guirnaldas + entre 4 bombillos), ref. producción 1.2 / propagación 1.5
 
 const db = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
 
@@ -1379,12 +1394,84 @@ function valoresLuz(){
            entre_guirnaldas: n('luzGuirnaldas'), entre_cuatro_bombillos: n('luzBombillos') };
 }
 
+const IDS_PUNTO_LUZ = { inicio:'luzInicio', mitad:'luzMitad', final:'luzFinal', entre_guirnaldas:'luzGuirnaldas', entre_cuatro_bombillos:'luzBombillos' };
+const NOMBRE_PUNTO_LUZ = {
+  inicio:'Inicio', mitad:'Mitad', final:'Final', entre_guirnaldas:'Entre 2 guirnaldas', entre_cuatro_bombillos:'Entre 4 bombillos',
+  anterior:'Anterior', posterior:'Posterior', bajo_bombillo:'Bajo bombillo', entre_bombillo:'Entre bombillo', borde:'Borde'
+};
+
+function mediana(arr){
+  const a = [...arr].sort((x, y) => x - y), n = a.length;
+  return !n ? NaN : (n % 2 ? a[(n - 1) / 2] : (a[n / 2 - 1] + a[n / 2]) / 2);
+}
+
+/* Detecta valores desbordados o inconsistentes con los demás puntos de la misma cama.
+   valores: {punto: número}. Devuelve {punto: {motivo:'alto'|'bajo', mediana, sugerido}} */
+function luzAtipicos(valores){
+  const llenos = Object.entries(valores).filter(([_, x]) => x != null && x !== '' && !isNaN(x)).map(([k, x]) => [k, Number(x)]);
+  const res = {};
+  for(const [k, v] of llenos){
+    // Referencia: los demás puntos, sin contar los que ya superan el tope físico
+    const otros = llenos.filter(([k2, x]) => k2 !== k && x <= LUZ_MAX_PLAUSIBLE).map(([_, x]) => x);
+    const med = otros.length >= 2 ? mediana(otros) : null;
+    let motivo = null;
+    if(v > LUZ_MAX_PLAUSIBLE) motivo = 'alto';
+    else if(med != null && med > 0 && v > med * LUZ_FACTOR_ALTO) motivo = 'alto';
+    else if(med != null && med > 0 && v < med / LUZ_FACTOR_BAJO) motivo = 'bajo';
+    if(!motivo) continue;
+    // ¿Error de coma? (17.90 en vez de 1.79, o 0.15 en vez de 1.50)
+    const cand = motivo === 'alto' ? Math.round(v * 10) / 100 : Math.round(v * 1000) / 100;
+    const cerca = med != null ? (cand >= med * 0.5 && cand <= med * 1.5) : (motivo === 'alto' && cand <= LUZ_MAX_PLAUSIBLE);
+    res[k] = { motivo, mediana: med, sugerido: (cand > 0 && cand <= LUZ_MAX_PLAUSIBLE && cerca) ? cand : null };
+  }
+  return res;
+}
+
+function usarSugeridoLuz(k, valor){
+  $(IDS_PUNTO_LUZ[k]).value = valor.toFixed(2);
+  $('confAtipico').checked = false;
+  revisarUmbralLuz();
+}
+
+/* Pinta en morado los valores atípicos del formulario y muestra el aviso */
+function pintarAtipicosLuz(v){
+  const at = luzAtipicos(v);
+  Object.entries(IDS_PUNTO_LUZ).forEach(([k, id]) => $(id).classList.toggle('luzAtipica', !!at[k]));
+  const caja = $('avisoAtipico'), conf = $('confAtipicoWrap'), claves = Object.keys(at);
+  if(!claves.length){
+    caja.style.display = 'none'; conf.style.display = 'none'; $('confAtipico').checked = false;
+    return at;
+  }
+  const detalle = claves.map(k => {
+    const a = at[k];
+    const base = a.mediana != null
+      ? `los demás puntos están cerca de ${a.mediana.toFixed(2)}`
+      : `supera el máximo esperado de ${LUZ_MAX_PLAUSIBLE.toFixed(1)}`;
+    const sug = a.sugerido != null
+      ? ` ¿Quiso escribir <b>${a.sugerido.toFixed(2)}</b>? <button type="button" onclick="usarSugeridoLuz('${k}', ${a.sugerido})">Usar ${a.sugerido.toFixed(2)}</button>`
+      : '';
+    return `<div style="margin-top:4px">• <b>${NOMBRE_PUNTO_LUZ[k]}: ${v[k].toFixed(2)}</b> — ${base}.${sug}</div>`;
+  }).join('');
+  caja.innerHTML = `🟣 Valor fuera de lo normal. Revise el dato o vuelva a medir en ese punto:${detalle}`;
+  caja.style.display = 'block';
+  conf.style.display = 'flex';
+  return at;
+}
+
 function revisarUmbralLuz(){
   const v = valoresLuz();
   const caja = $('avisoLuz'), obs = $('obsLuzWrap');
   const llenos = Object.values(v).filter(x => !isNaN(x));
   caja.className = 'deltaPrevio';
   obs.classList.remove('visible');
+  const at = pintarAtipicosLuz(v);
+  const hayAtipicos = Object.keys(at).length > 0;
+  if(hayAtipicos && $('confAtipico').checked){
+    obs.classList.add('visible');
+    $('obsLuzLbl').textContent = 'Observación (obligatoria: explique el valor fuera de lo normal)';
+  } else {
+    $('obsLuzLbl').textContent = 'Observación (obligatoria por valores bajo la referencia)';
+  }
   if(!llenos.length || !tipoLuz) return;
   const ref = REF_LUZ[tipoLuz];
   const bajos = Object.entries(v).filter(([_, x]) => !isNaN(x) && x < ref);
@@ -1393,7 +1480,7 @@ function revisarUmbralLuz(){
     caja.classList.add('mal');
     caja.textContent = `⚠ Bajo la referencia de ${ref.toFixed(1)} µmol/m²/s (${NOMBRE_TIPO_LUZ[tipoLuz]}): ${bajos.map(([k]) => nombres[k]).join(', ')}. Escriba una observación.`;
     obs.classList.add('visible');
-  } else if(llenos.length === 5){
+  } else if(llenos.length === 5 && !hayAtipicos){
     caja.classList.add('ok');
     caja.textContent = `✔ Los 5 puntos cumplen la referencia de ${ref.toFixed(1)} µmol/m²/s (${NOMBRE_TIPO_LUZ[tipoLuz]}).`;
   }
@@ -1414,6 +1501,22 @@ async function guardarLecturaLuz(){
   if(isNaN(cama) || cama < 1){ aviso('Ingrese el número de cama.', true); return; }
   if(!fh){ aviso('Indique la fecha y hora de la lectura.', true); return; }
   if(Object.values(v).some(x => isNaN(x) || x < 0)){ aviso('Complete las 5 mediciones (inicio, mitad, final, entre 2 guirnaldas y entre 4 bombillos) con valores válidos.', true); return; }
+
+  // Valores desbordados o inconsistentes: corregir o volver a medir; si se confirma, observación obligatoria
+  const atipicos = pintarAtipicosLuz(v);
+  const clavesAt = Object.keys(atipicos);
+  if(clavesAt.length){
+    if(!$('confAtipico').checked){
+      $(IDS_PUNTO_LUZ[clavesAt[0]]).focus();
+      aviso(`🟣 Valor fuera de lo normal en ${clavesAt.map(k => NOMBRE_PUNTO_LUZ[k]).join(', ')}. Corrija el dato o vuelva a medir en ese punto. Si ya volvió a medir y es correcto, marque la casilla de confirmación.`, true);
+      return;
+    }
+    if(!observacion){
+      $('obsLuzWrap').classList.add('visible');
+      aviso('Escriba una observación que explique el valor fuera de lo normal (ej. "bombillo bajo, a 30 cm del dosel").', true);
+      return;
+    }
+  }
 
   const ref = REF_LUZ[tipoLuz];
   const hayBajos = Object.values(v).some(x => x < ref);
@@ -1461,6 +1564,7 @@ async function guardarLecturaLuz(){
   // Limpiar solo mediciones y observación; conservar tipo/bloque/cama/lado para la siguiente cama
   ['luzInicio','luzMitad','luzFinal','luzGuirnaldas','luzBombillos'].forEach(id => $(id).value = '');
   $('obsLuz').value = '';
+  $('confAtipico').checked = false;
   luzHoraManual = false; horaLuzAuto(true);
   revisarUmbralLuz();
   registrarPosicion('lectura');
@@ -1584,20 +1688,29 @@ function pintarAvisoTope(total, tipo){
   } else el.style.display = 'none';
 }
 
+/* Cada carga del dashboard recibe un número; si mientras espera la red se pide otra
+   (cambio de pestaña Horómetros/Luz, de filtro o de fecha), la respuesta vieja se descarta
+   y no reemplaza lo que el usuario está viendo. */
+let consultaDashId = 0;
+
 async function cargarAlertas(){
   if(modoDashboard === 'luz'){ return cargarLuzDashboard(); }
+  const miConsulta = ++consultaDashId;
   if(!hayRed()){
     $('listaAlertas').innerHTML = '<div class="vacio">El historial de lecturas requiere conexión.</div>';
     return;
   }
   const f = await filtrosHoro();
+  if(miConsulta !== consultaDashId) return;
   const { data, error } = await consultaHoro(f, f.desde).limit(LIMITE_PANTALLA);
+  if(miConsulta !== consultaDashId) return;
   if(error){ aviso(error.message, true); return; }
 
   // lecturas.usuario_id no tiene relación directa con perfiles para PostgREST
   // (ambas apuntan a la tabla interna de autenticación, no entre sí), así que
   // los nombres de quien registró se resuelven aparte y se unen aquí.
   const { data: perfilesAll } = await db.from('perfiles').select('id, nombre');
+  if(miConsulta !== consultaDashId) return;
   const nombrePorId = {};
   (perfilesAll || []).forEach(p => { nombrePorId[p.id] = p.nombre; });
   (data || []).forEach(l => { l.perfiles = { nombre: nombrePorId[l.usuario_id] || '—' }; });
@@ -1773,6 +1886,18 @@ async function toggleHorometro(id, activo, nombre, codBloque){
 }
 
 /* ------------------------- dashboard: luz nocturna ------------------------- */
+/* Puntos de una lectura de luz: [[clave, etiqueta corta, valor], ...] */
+function puntosLuz(l){
+  return l.tipo_cultivo
+    ? [['inicio','Inicio',l.inicio], ['mitad','Mitad',l.mitad], ['final','Final',l.final],
+       ['entre_guirnaldas','Entre guirn.',l.entre_guirnaldas], ['entre_cuatro_bombillos','Entre 4 bomb.',l.entre_cuatro_bombillos]].filter(p => p[2] != null)
+    : [['anterior','Anterior',l.anterior], ['posterior','Posterior',l.posterior], ['bajo_bombillo','Bajo bomb.',l.bajo_bombillo],
+       ['entre_bombillo','Entre bomb.',l.entre_bombillo], ['borde','Borde',l.borde]];
+}
+function atipicosDeLectura(l){
+  return luzAtipicos(Object.fromEntries(puntosLuz(l).map(([k, _, v]) => [k, v])));
+}
+
 /* Consulta de luz nocturna con los filtros del dashboard (sin límite) */
 function consultaLuz(desde){
   const hasta = $('alHasta').value, bloqueId = $('alBloque').value;
@@ -1788,15 +1913,18 @@ function consultaLuz(desde){
 }
 
 async function cargarLuzDashboard(){
+  const miConsulta = ++consultaDashId;
   if(!hayRed()){
     $('listaAlertas').innerHTML = '<div class="vacio">El historial de luz nocturna requiere conexión.</div>';
     return;
   }
   const { data, error } = await consultaLuz($('alDesde').value).limit(LIMITE_PANTALLA);
+  if(miConsulta !== consultaDashId) return;
   if(error){ aviso(error.message, true); return; }
 
   // Nombres de quien registró (misma resolución aparte que en horómetros)
   const { data: perfilesAll } = await db.from('perfiles').select('id, nombre');
+  if(miConsulta !== consultaDashId) return;
   const nombrePorId = {};
   (perfilesAll || []).forEach(p => { nombrePorId[p.id] = p.nombre; });
 
@@ -1815,9 +1943,11 @@ async function cargarLuzDashboard(){
   }
 
   const fmtHora = t => new Date(t).toLocaleString('es-CO', {day:'2-digit', month:'2-digit', year:'numeric', hour:'2-digit', minute:'2-digit', timeZone:'America/Bogota'});
-  const celda = (nombre, valor, ref) => {
+  const celda = (nombre, valor, ref, atipico) => {
     const bajo = Number(valor) < ref;
-    return `<div style="text-align:center"><div style="font-size:10px;color:var(--texto2);text-transform:uppercase;letter-spacing:.04em">${nombre}</div><div class="mono" style="font-weight:700;color:${bajo ? 'var(--rojo)' : 'var(--verde)'}">${Number(valor).toFixed(2)}</div></div>`;
+    const color = atipico ? 'var(--morado)' : (bajo ? 'var(--rojo)' : 'var(--verde)');
+    const marco = atipico ? 'background:var(--morado-suave);border:1px solid var(--morado);border-radius:8px;padding:2px 0;' : '';
+    return `<div style="text-align:center;${marco}" ${atipico ? 'title="Valor fuera de lo normal"' : ''}><div style="font-size:10px;color:${atipico ? 'var(--morado)' : 'var(--texto2)'};text-transform:uppercase;letter-spacing:.04em">${nombre}</div><div class="mono" style="font-weight:700;color:${color}">${Number(valor).toFixed(2)}${atipico ? ' ?' : ''}</div></div>`;
   };
 
   $('listaAlertas').innerHTML = ultimaConsultaLuz.map(l => {
@@ -1826,18 +1956,18 @@ async function cargarLuzDashboard(){
     const tipoTxt = nuevo
       ? `${l.tipo_cultivo === 'propagacion' ? '🌱' : '🌼'} ${NOMBRE_TIPO_LUZ[l.tipo_cultivo]} · ref ${ref.toFixed(1)}`
       : `Formato anterior (5 puntos) · ref ${ref.toFixed(1)}`;
-    const puntos = nuevo
-      ? [['Inicio', l.inicio], ['Mitad', l.mitad], ['Final', l.final], ['Entre guirn.', l.entre_guirnaldas], ['Entre 4 bomb.', l.entre_cuatro_bombillos]].filter(([_, x]) => x != null)
-      : [['Anterior', l.anterior], ['Posterior', l.posterior], ['Bajo bomb.', l.bajo_bombillo], ['Entre bomb.', l.entre_bombillo], ['Borde', l.borde]];
+    const puntos = puntosLuz(l);
+    const at = atipicosDeLectura(l);
+    const hayAt = Object.keys(at).length > 0;
     return `
     <div class="alertaItem" style="border-left-color:${l.bajo_umbral ? 'var(--rojo)' : 'var(--verde)'}">
       <div class="alertaCab">
-        <span>Bloque <b>${l.bloques?.codigo ?? '?'}</b> · Cama ${l.cama}${l.lado}${l.bajo_umbral ? ' · ⚠' : ''}</span>
+        <span>Bloque <b>${l.bloques?.codigo ?? '?'}</b> · Cama ${l.cama}${l.lado}${l.bajo_umbral ? ' · ⚠' : ''}${hayAt ? ' · <b style="color:var(--morado)">🟣 valor atípico</b>' : ''}</span>
         <span class="mono">${fmtHora(l.medido_en)}</span>
       </div>
       <div style="font-size:12px;color:var(--texto2);margin-top:4px">${tipoTxt} µmol/m²/s</div>
       <div style="display:grid;grid-template-columns:repeat(${puntos.length},1fr);gap:6px;margin-top:10px">
-        ${puntos.map(([n, val]) => celda(n, val, ref)).join('')}
+        ${puntos.map(([k, n, val]) => celda(n, val, ref, !!at[k])).join('')}
       </div>
       <div style="font-size:12px;color:var(--texto2);margin-top:8px">Registró: ${l.registro}</div>
       ${l.observacion ? `<div class="alertaObs">📝 ${l.observacion}</div>` : ''}
@@ -1850,7 +1980,7 @@ function descargarCSVLuz(datos, desde, hasta){
   const hayAntiguos = datos.some(l => !l.tipo_cultivo);
   const enc = ['Fecha y hora','Bloque','Cama','Lado','Tipo de cama','Referencia (umol/m2/s)','Inicio','Mitad','Final','Entre 2 guirnaldas','Entre 4 bombillos']
     .concat(hayAntiguos ? ['Anterior','Posterior','Bajo bombillo','Entre bombillo','Borde'] : [])
-    .concat(['Bajo referencia','Observacion','Registro']);
+    .concat(['Bajo referencia','Valores atipicos','Observacion','Registro']);
   const esc = v => '"' + String(v ?? '').replace(/"/g, '""') + '"';
   const num = v => v == null ? '' : String(Number(v).toFixed(2)).replace('.', ',');
   const filas = datos.map(l => [
@@ -1861,7 +1991,9 @@ function descargarCSVLuz(datos, desde, hasta){
     num(l.referencia ?? UMBRAL_LUZ),
     num(l.inicio), num(l.mitad), num(l.final), num(l.entre_guirnaldas), num(l.entre_cuatro_bombillos)
   ].concat(hayAntiguos ? [num(l.anterior), num(l.posterior), num(l.bajo_bombillo), num(l.entre_bombillo), num(l.borde)] : [])
-   .concat([l.bajo_umbral ? 'SI' : 'NO', l.observacion ?? '', l.registro ?? ''])
+   .concat([l.bajo_umbral ? 'SI' : 'NO',
+            Object.keys(atipicosDeLectura(l)).map(k => `${NOMBRE_PUNTO_LUZ[k]} ${num(l[k])}`).join(' | '),
+            l.observacion ?? '', l.registro ?? ''])
    .map(esc).join(';'));
   guardarArchivoCSV(enc, filas, `luz_nocturna_${desde}_a_${hasta}.csv`);
 }
