@@ -108,6 +108,29 @@
   .protocoloLuz ul{margin:8px 0 0;padding-left:18px;color:var(--texto2);line-height:1.45}
   .protocoloLuz li{margin-bottom:4px}
   .protocoloLuz b{color:var(--texto)}
+  .pendItem.novItem{border-left-color:var(--amarillo)}
+  .novDesc{font-size:14px;margin:6px 0 8px;white-space:pre-wrap;word-break:break-word}
+  .tarjetaNovedad{border-style:dashed}
+  .miniBtn.bancoSi{border-color:var(--verde);color:var(--verde)}
+  .marcaLect{display:inline-block;font-size:11px;font-weight:700;border-radius:999px;padding:2px 8px;margin:2px 0 4px}
+  .marcaLect.siembra{background:var(--panel2);color:var(--verde);border:1px solid var(--verde)}
+  .marcaLect.alto{background:var(--panel2);color:var(--ambar);border:1px solid var(--ambar)}
+  .deltaDias{font-size:12px;font-weight:600;color:var(--texto2);margin-left:4px}
+  .nochesGrid{display:grid;grid-template-columns:repeat(auto-fill,minmax(100px,1fr));gap:8px}
+  .nocheTile{border:1px solid var(--borde);border-radius:10px;padding:8px;background:var(--panel2);text-align:center}
+  .nocheTile.siembraT{border-color:var(--verde)}
+  .nocheTile.vacioT{opacity:.6}
+  .nocheCab{font-size:11px;font-weight:700;color:var(--texto2);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .nocheNum{font-size:24px;font-weight:800;line-height:1.2;margin:2px 0}
+  .nochePie{font-size:10.5px;color:var(--texto2);line-height:1.35}
+  .nochesMas{margin-top:8px}
+  .nochesMas summary{cursor:pointer;font-size:13px;font-weight:600;color:var(--texto2);margin-bottom:8px}
+  .confirmaSalto{display:none;margin-top:8px;border:1px solid var(--rojo);border-radius:10px;padding:10px 12px;font-size:13px;background:var(--panel2)}
+  .confirmaSalto.visible{display:block}
+  .opcSalto{display:flex;align-items:flex-start;gap:8px;margin:6px 0;font-size:13px;text-transform:none;letter-spacing:0;color:var(--texto);font-weight:600;cursor:pointer}
+  .opcSalto input{width:auto;margin:2px 0 0;flex:none}
+  .checkSiembra{display:flex;align-items:center;gap:8px;margin-top:8px;font-size:13px;text-transform:none;letter-spacing:0;color:var(--texto);font-weight:600}
+  .checkSiembra input{width:auto;margin:0}
   .obsCampo{display:none;margin-top:10px}
   .obsCampo.visible{display:block}
   .yaRegistrada{margin-top:10px;font-size:13px;color:var(--verde);background:var(--verde-suave);border-radius:10px;padding:10px 12px}
@@ -214,7 +237,7 @@
           <button type="button" class="chip" id="tipoLuz-propagacion" onclick="elegirTipoLuz('propagacion')">🌱 Propagación · 1.5</button>
         </div>
         <div class="fila">
-          <div><label for="luzBloque">Bloque</label><select id="luzBloque" onchange="aplicarTipoGuardado()"></select></div>
+          <div><label for="luzBloque">Bloque</label><select id="luzBloque" onchange="aplicarTipoGuardado(); pintarNovBloque()"></select></div>
           <div><label for="luzCama">Cama</label><input type="number" id="luzCama" min="1" class="mono" placeholder="ej. 64"></div>
           <div><label for="luzLado">Lado</label><select id="luzLado"><option value="A">A</option><option value="B">B</option></select></div>
         </div>
@@ -250,12 +273,21 @@
         </div>
         <button class="guardarMini" id="btnGuardarLuz" onclick="guardarLecturaLuz()">Guardar lectura de luz</button>
       </div>
+      <div class="tarjeta tarjetaNovedad">
+        <h2 style="margin:0 0 4px">⚡ Novedad del sistema eléctrico <span style="text-transform:none;letter-spacing:0;font-weight:500;color:var(--texto2)">(opcional)</span></h2>
+        <div class="horaHint" style="margin:0 0 8px">Algo que vio en el <b id="novBloqueTxt">bloque</b> y que no es de la medición de luz: cable pelado, caja o tablero abierto, breaker disparado, guirnalda caída, bombillos apagados en una zona… Le aparece al equipo en <b>Pendientes</b> desde las 6:00 a. m. siguientes para intervenirlo.</div>
+        <label for="novTexto">Qué vio y dónde</label>
+        <textarea id="novTexto" rows="2" placeholder="ej. Tablero de la nave 5 sin tapa; cable de guirnalda pelado en cama 30"></textarea>
+        <button class="guardarMini" id="btnNovedad" onclick="reportarNovedad()">⚡ Reportar novedad</button>
+        <div style="font-size:12px;color:var(--texto2);margin-top:6px">Si escribe aquí y luego guarda la lectura de luz, la novedad también se reporta.</div>
+      </div>
     </div>
   </section>
 
   <!-- PENDIENTES -->
   <section class="seccion" id="sec-pendientes">
     <div id="erroresPendientes"></div>
+    <div id="novedadesPend"></div>
     <div class="resumenDia">
       <div class="kpi"><div class="num" style="color:var(--verde)" id="kpiReg">0</div><div class="lbl">Registrados</div></div>
       <div class="kpi"><div class="num" style="color:var(--ambar)" id="kpiPend">0</div><div class="lbl">Pendientes</div></div>
@@ -306,6 +338,7 @@
       <div class="kpi"><div class="num" style="color:var(--verde)" id="kpiOk">—</div><div class="lbl" id="kpiOkLbl">% en verde</div></div>
     </div>
     <div id="avisoTope" class="horaHint" style="display:none;margin:-4px 2px 12px"></div>
+    <div class="tarjeta" id="panelNoches" style="display:none"></div>
     <div class="tarjeta">
       <h2 style="margin-top:0">🚶 Recorrido del operario</h2>
       <div class="fila">
@@ -353,7 +386,7 @@
     <h2>Bloques del cultivo</h2>
     <div class="tarjeta" style="padding:6px 12px">
       <table>
-        <thead><tr><th>Bloque</th><th>Naves</th><th>Medias</th><th>GPS</th></tr></thead>
+        <thead><tr><th>Bloque</th><th>Naves</th><th>Medias</th><th title="Los bancos no se cuentan a 2 h por noche">Banco</th><th>GPS</th></tr></thead>
         <tbody id="tablaBloques"></tbody>
       </table>
     </div>
@@ -383,6 +416,23 @@ const UMBRAL_HORAS = UMBRAL_ROJO;  // la observación solo se exige en rojo
 // entre 1.5 y < 2.0 h -> AMARILLO (se muestra, sin observación obligatoria)
 // Resta en décimas enteras, igual que el servidor (numeric(12,1)): evita que
 // JavaScript dé 2.3 - 0.8 = 1.4999… y pinte en rojo una noche de 1.5 h exactas.
+function diasEntre(desdeISO, hastaISO){
+  const [a, b, c] = desdeISO.split('-').map(Number), [x, y, z] = hastaISO.split('-').map(Number);
+  return Math.round((Date.UTC(x, y - 1, z) - Date.UTC(a, b - 1, c)) / 86400000);
+}
+/* Noches de luz equivalentes a unas horas de horómetro (null en bancos) */
+function nochesDe(horas, esBanco){
+  if(esBanco || horas == null || isNaN(horas)) return null;
+  return Math.round(Number(horas) / HORAS_POR_NOCHE);
+}
+function txtNoches(n){ return n == null ? '' : `≈ ${n} noche${n === 1 ? '' : 's'}`; }
+/* Clasifica una lectura nueva frente a la anterior:
+   'alto'  : más de MAX_HORAS_NOCHE en días seguidos (pedir confirmación)
+   'salto' : más de MAX_HORAS_NOCHE tras varios días sin lectura (¿inicio de siembra?) */
+function tipoSalto(delta, dias){
+  if(delta == null || dias == null || delta <= MAX_HORAS_NOCHE) return null;
+  return dias <= 1 ? 'alto' : 'salto';
+}
 function deltaHoras(v, prev){ return (Math.round(Number(v)*10) - Math.round(Number(prev)*10)) / 10; }
 function nivelDelta(d){
   if(d == null || d === '' || isNaN(d)) return 'verde';
@@ -394,6 +444,9 @@ function nivelDelta(d){
 const LIMITE_PANTALLA = 500;   // lecturas que se muestran en el dashboard (las más recientes)
 const MESES_CSV = 6;           // el CSV trae todo el rango filtrado; sin fecha "Desde", los últimos 6 meses
 const HORAS_ESPERADAS = 2;     // delta esperado por noche (barra al 100%)
+const HORAS_POR_NOCHE = 2;     // una noche de luces ≈ 2 h en el horómetro (no aplica a bancos)
+const MAX_HORAS_NOCHE = 10;    // entre dos días seguidos, más de 10 h pide confirmar la lectura;
+                               // tras varios días sin lectura, más de 10 h es un "salto" (¿inicio de siembra?)
 const VEL_CAMINATA_KMH = 4;    // velocidad para estimar tiempo de recorrido
 const MIN_POR_BLOQUE = 3;      // minutos estimados de registro por bloque
 const HORA_INICIO_REGISTRO = 6;   // ventana laboral de registro: 6 a.m.
@@ -411,7 +464,7 @@ const LUZ_FACTOR_ALTO = 3;        // atípico si supera 3 veces la mediana de lo
 const LUZ_FACTOR_BAJO = 4;        // atípico si es menor que la mediana de los otros puntos / 4
 // Súbela cada vez que entregues una versión nueva — así se puede confirmar
 // a simple vista, desde la app, cuál versión quedó instalada en cada celular.
-const VERSION_APP = 'v2026.11.03-1';   // luz nocturna: 5 puntos (inicio/mitad/final + entre guirnaldas + entre 4 bombillos), ref. producción 1.2 / propagación 1.5
+const VERSION_APP = 'v2026.11.19-1';   // > 10 h por noche, saltos / inicio de siembra, noches por horómetro, bancos, novedades eléctricas
 
 const db = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
 
@@ -424,6 +477,7 @@ let perfil = null;
 let bloques = [];
 let horometrosBloque = [];
 let editandoLecturaId = null;   // id del horómetro cuya lectura de hoy se está corrigiendo
+let prevPorHoro = {};           // {horometro_id: {fecha, valor}} lectura ANTERIOR a la fecha del registro
 let posicion = null;            // {lat, lng, acc}
 let estadoDia = { registrados:new Set(), justificados:new Set() };
 
@@ -582,6 +636,8 @@ async function arrancarApp(){
   await cargarHorometrosBloque();
   await cargarEstadoDia();
   pintarErroresPendientes();
+  pintarNovBloque();
+  await cargarNovedades();
   if(hayRed()){
     await sincronizarCola();
     await cargarAlertas();
@@ -591,6 +647,7 @@ async function arrancarApp(){
   }
   // Revisión de pendientes cada 30 min
   setInterval(revisarNotificacionPendientes, 30 * 60 * 1000);
+  setInterval(pintarNovedades, 10 * 60 * 1000);   // a las 6 a. m. aparecen las de la noche sin recargar
   revisarNotificacionPendientes();
 }
 
@@ -601,7 +658,8 @@ function mostrarLoginOffline(){
 
 /* ------------------------- red / cola de sincronización ------------------------- */
 function actualizarBanner(){
-  const cola = lsGet('colaLecturas', []).length + lsGet('colaLuz', []).length;
+  const cola = lsGet('colaLecturas', []).length + lsGet('colaLuz', []).length
+    + lsGet('colaNovedades', []).length + lsGet('colaCierres', []).length;
   const banner = $('bannerRed');
   if(!hayRed()){
     banner.classList.add('visible');
@@ -665,6 +723,26 @@ async function sincronizarCola(){
   if(colaL.length && !fallidasL.length) aviso(`✔ ${colaL.length} lectura(s) de luz sincronizada(s).`);
   if(fallidasL.length) aviso(`${fallidasL.length} lectura(s) de luz no se pudieron subir. Revíselas en Pendientes.`, true);
 
+  // novedades eléctricas en cola (id_cliente evita duplicados si se subió a medias)
+  const colaN = lsGet('colaNovedades', []);
+  const fallidasN = [];
+  for(const n of colaN){
+    const { error } = await db.from('novedades_electricas').insert(n);
+    if(error && !/duplicate|id_cliente/i.test(error.message)) fallidasN.push(n);
+  }
+  lsSet('colaNovedades', fallidasN);
+  if(colaN.length && !fallidasN.length) aviso(`✔ ${colaN.length} novedad(es) eléctrica(s) sincronizada(s).`);
+
+  // novedades marcadas como intervenidas sin conexión
+  const colaC = lsGet('colaCierres', []);
+  const fallidasC = [];
+  for(const { id, ...cambios } of colaC){
+    const { error } = await db.from('novedades_electricas').update(cambios).eq('id', id).eq('estado', 'pendiente');
+    if(error) fallidasC.push({ id, ...cambios });
+  }
+  lsSet('colaCierres', fallidasC);
+  if(colaN.length || colaC.length) await cargarNovedades();
+
   // recorridos en cola
   let colaR = lsGet('colaRecorridos', []);
   if(colaR.length){
@@ -720,11 +798,27 @@ function pintarTablaBloques(){
       <td><b>${b.codigo}</b></td>
       <td class="mono">${b.naves}</td>
       <td class="mono">${Number(b.medias_naves) || '—'}</td>
+      <td>${!('es_banco' in b) ? '—'
+        : puedeEditar ? `<button class="miniBtn${b.es_banco ? ' bancoSi' : ''}" onclick="marcarBanco(${b.id})" title="Marcar o quitar como banco">${b.es_banco ? 'Sí' : 'No'}</button>`
+        : (b.es_banco ? 'Sí' : '—')}</td>
       <td style="white-space:nowrap">
         ${b.lat ? '📍' : (puedeEditar ? `<button class="miniBtn" onclick="capturarGPS(${b.id})">GPS</button>` : '—')}
         ${puedeEditar ? ` <button class="miniBtn" onclick="editarBloque(${b.id})">✎</button>` : ''}
       </td>
     </tr>`).join('');
+}
+
+/* Bancos: sus horómetros no se convierten a noches (2 h/noche no aplica) */
+async function marcarBanco(bloqueId){
+  if(!hayRed()){ aviso('Se requiere conexión para editar bloques.', true); return; }
+  const b = bloquePorId(bloqueId);
+  const nuevo = !b.es_banco;
+  if(!confirm(nuevo ? `¿Marcar el bloque ${b.codigo} como BANCO? Sus horómetros se mostrarán solo en horas (no en noches).`
+                    : `¿Quitar la marca de banco al bloque ${b.codigo}? Sus horómetros se contarán a ${HORAS_POR_NOCHE} h por noche.`)) return;
+  const { error } = await db.from('bloques').update({ es_banco: nuevo }).eq('id', bloqueId);
+  if(error){ aviso('Error: ' + error.message, true); return; }
+  aviso(`Bloque ${b.codigo}: ${nuevo ? 'marcado como banco' : 'ya no es banco'} ✔`);
+  await cargarBloques();
 }
 
 async function editarBloque(bloqueId){
@@ -838,18 +932,25 @@ async function cargarHorometrosBloque(){
   }
   const ids = hs.map(h => h.id);
 
-  // Últimas lecturas: red → refresca caché; sin red → caché
-  let ultimas = lsGet('cacheUltimas', {});   // {horometro_id: {fecha, valor}}
+  // Lectura ANTERIOR a la fecha del registro, por horómetro.
+  // Con red: la más reciente antes de esa fecha. Sin red: la caché, solo si es de antes
+  // (la caché también guarda la lectura de hoy, que no sirve como "anterior").
+  let ultimas = lsGet('cacheUltimas', {});   // {horometro_id: {fecha, valor}} — la más reciente conocida
+  prevPorHoro = {};
   if(hayRed()){
     const { data: prevs } = await db.from('lecturas')
       .select('horometro_id, fecha, valor').in('horometro_id', ids)
       .lt('fecha', fecha).order('fecha', { ascending:false });
     (prevs||[]).forEach(l => {
+      if(!prevPorHoro[l.horometro_id]) prevPorHoro[l.horometro_id] = { fecha:l.fecha, valor:Number(l.valor) };
       if(!ultimas[l.horometro_id] || l.fecha > ultimas[l.horometro_id].fecha)
         ultimas[l.horometro_id] = { fecha:l.fecha, valor:Number(l.valor) };
     });
     lsSet('cacheUltimas', ultimas);
+  } else {
+    ids.forEach(id => { if(ultimas[id] && ultimas[id].fecha < fecha) prevPorHoro[id] = ultimas[id]; });
   }
+  const esBanco = !!b.es_banco;
 
   // Registradas hoy: servidor + cola local
   const registrada = {};
@@ -862,19 +963,20 @@ async function cargarHorometrosBloque(){
   cola.filter(c => c.fecha === fecha && ids.includes(c.horometro_id)).forEach(c => enCola[c.horometro_id] = c);
 
   $('listaHorometrosRegistro').innerHTML = hs.map(h => {
-    const prev = ultimas[h.id];
+    const prev = prevPorHoro[h.id];
     const reg = registrada[h.id];
     const pend = enCola[h.id];
     const cab = `
       <div class="horoCab"><span class="horoNombre">${h.nombre}</span><span class="horoRango">naves ${h.nave_desde}–${h.nave_hasta}</span></div>
-      <div class="ultima">${prev ? `Última lectura (${prev.fecha}): <b class="mono">${prev.valor.toFixed(1)} h</b>` : 'Sin lecturas anteriores (primera lectura).'}</div>`;
+      <div class="ultima">${prev ? `Última lectura (${prev.fecha}${diasEntre(prev.fecha, fecha) > 1 ? ` · hace ${diasEntre(prev.fecha, fecha)} días` : ''}): <b class="mono">${prev.valor.toFixed(1)} h</b>` : 'Sin lecturas anteriores (primera lectura).'}</div>`;
 
     if(reg && editandoLecturaId !== h.id){
       const puedeEditar = hayRed() && ((reg.usuario_id === perfil.id && fecha === hoyISO()) || esSupervisorOAdmin());
       const pct = reg.delta == null ? 100 : Math.min(100, (Number(reg.delta)/HORAS_ESPERADAS)*100);
+      const nReg = reg.delta != null && !reg.inicio_siembra ? nochesDe(reg.delta, esBanco) : null;
       return `<div class="horoItem">${cab}
         <div class="yaRegistrada">✔ Registrado: <b class="mono">${Number(reg.valor).toFixed(1)} h</b>
-        ${reg.delta != null ? ` · Δ <b class="mono">${Number(reg.delta).toFixed(1)} h</b>` : ''}${nivelDelta(reg.delta)==='rojo' ? ' · ⚠ ALERTA' : (nivelDelta(reg.delta)==='amarillo' ? ' · 🟡 Atención' : '')}
+        ${reg.delta != null ? ` · Δ <b class="mono">${Number(reg.delta).toFixed(1)} h</b>` : ''}${reg.inicio_siembra ? ' · 🌱 Inicio de siembra' : (nivelDelta(reg.delta)==='rojo' ? ' · ⚠ ALERTA' : (nivelDelta(reg.delta)==='amarillo' ? ' · 🟡 Atención' : ''))}${nReg != null && nReg > 1 ? ` · ${txtNoches(nReg)}` : ''}
         ${puedeEditar ? ` <button class="miniBtn" style="margin-left:6px" onclick="activarEdicion(${h.id})">✎ Editar</button>` : ''}</div>
         <div class="barraLuz"><i class="${{rojo:'roja',amarillo:'amarilla',verde:'verde'}[nivelDelta(reg.delta)]}" style="width:${pct}%"></i></div>
         ${reg.observacion ? `<div class="alertaObs">${reg.observacion}</div>` : ''}</div>`;
@@ -883,11 +985,13 @@ async function cargarHorometrosBloque(){
       return `<div class="horoItem" id="horo-${h.id}">${cab}
         <label for="val-${h.id}">Corregir lectura (horas acumuladas)</label>
         <input type="number" step="0.1" min="0" id="val-${h.id}" class="mono" value="${Number(reg.valor).toFixed(1)}"
-               oninput="previsualizarDelta(${h.id}, ${prev ? prev.valor : 'null'})">
+               oninput="previsualizarDelta(${h.id})">
         <div class="deltaPrevio" id="delta-${h.id}"></div>
+        <div class="confirmaSalto" id="conf-${h.id}"></div>
+        <label class="checkSiembra" id="sieWrap-${h.id}"><input type="checkbox" id="sie-${h.id}" ${reg.inicio_siembra ? 'checked' : ''}> 🌱 Esta lectura es el inicio de la siembra</label>
         <div class="barraLuz"><i id="barra-${h.id}" style="width:0%"></i></div>
         <div class="obsCampo" id="obsWrap-${h.id}">
-          <label for="obs-${h.id}">Observación</label>
+          <label for="obs-${h.id}" id="obsLbl-${h.id}">Observación</label>
           <textarea id="obs-${h.id}" rows="2" placeholder="ej. Corte de energía 8pm–2am, breaker disparado…">${reg.observacion ?? ''}</textarea>
         </div>
         <div style="display:flex;gap:8px">
@@ -903,11 +1007,12 @@ async function cargarHorometrosBloque(){
     return `<div class="horoItem" id="horo-${h.id}">${cab}
       <label for="val-${h.id}">Lectura de hoy (horas acumuladas)</label>
       <input type="number" step="0.1" min="0" id="val-${h.id}" class="mono" placeholder="0.0"
-             oninput="previsualizarDelta(${h.id}, ${prev ? prev.valor : 'null'})">
+             oninput="previsualizarDelta(${h.id})">
       <div class="deltaPrevio" id="delta-${h.id}"></div>
+      <div class="confirmaSalto" id="conf-${h.id}"></div>
       <div class="barraLuz"><i id="barra-${h.id}" style="width:0%"></i></div>
       <div class="obsCampo" id="obsWrap-${h.id}">
-        <label for="obs-${h.id}">Observación (obligatoria por alerta)</label>
+        <label for="obs-${h.id}" id="obsLbl-${h.id}">Observación (obligatoria por alerta)</label>
         <textarea id="obs-${h.id}" rows="2" placeholder="ej. Corte de energía 8pm–2am, breaker disparado…"></textarea>
       </div>
       <button class="guardarMini" id="btnGuardar-${h.id}" onclick="guardarLectura(${h.id})">Guardar lectura</button></div>`;
@@ -915,34 +1020,117 @@ async function cargarHorometrosBloque(){
 
   // Si algún horómetro quedó en modo edición, precalcula su vista de delta/observación
   if(editandoLecturaId != null && ids.includes(editandoLecturaId)){
-    const prevEdit = ultimas[editandoLecturaId];
-    previsualizarDelta(editandoLecturaId, prevEdit ? prevEdit.valor : null);
+    previsualizarDelta(editandoLecturaId);
   }
 }
 
-function previsualizarDelta(horoId, prevValor){
+/* Elección del operario ante un salto/lectura alta, por horómetro (se reinicia al cambiar el valor) */
+let eleccionSalto = {};   // {horoId: {e: 'confirmado' | 'siembra' | 'no_siembra', v: valor al que se respondió}}
+function eleccionDe(horoId, v){
+  const x = eleccionSalto[horoId];
+  return x && x.v === v ? x.e : null;   // si el operario cambia el valor, debe responder de nuevo
+}
+
+function previsualizarDelta(horoId){
   const v = parseFloat($('val-'+horoId).value);
   const caja = $('delta-'+horoId), barra = $('barra-'+horoId), obs = $('obsWrap-'+horoId);
+  const conf = $('conf-'+horoId), lbl = $('obsLbl-'+horoId), sieWrap = $('sieWrap-'+horoId);
   caja.className = 'deltaPrevio'; obs.classList.remove('visible'); barra.style.width='0%'; barra.className='';
-  if(isNaN(v) || prevValor === null) return;
-  const delta = deltaHoras(v, prevValor);
+  if(conf){ conf.innerHTML = ''; conf.className = 'confirmaSalto'; }
+  if(lbl) lbl.textContent = editandoLecturaId === horoId ? 'Observación' : 'Observación (obligatoria por alerta)';
+  if(sieWrap) sieWrap.style.display = '';
+  const prev = prevPorHoro[horoId];
+  if(isNaN(v) || !prev) return;
+  const fecha = $('regFecha').value || hoyISO();
+  const delta = deltaHoras(v, prev.valor);
+  const dias = diasEntre(prev.fecha, fecha);
   if(delta < 0){ caja.classList.add('mal'); caja.textContent = 'La lectura es menor a la anterior. Verifique el valor.'; return; }
   barra.style.width = Math.min(100, (delta/HORAS_ESPERADAS)*100) + '%';
+
+  const b = bloquePorId($('regBloque').value);
+  const noches = nochesDe(delta, b && b.es_banco);
+  const tipo = tipoSalto(delta, dias);
+  const enDias = dias > 1 ? ` en ${dias} días sin lectura` : '';
+
+  if(tipo === 'alto'){
+    // Más de 10 h entre dos días seguidos: confirmar la lectura
+    caja.classList.add('mal');
+    caja.textContent = `⚠ Δ ${delta.toFixed(1)} h en una sola noche: supera el máximo de ${MAX_HORAS_NOCHE} h. Vuelva a mirar el horómetro antes de guardar.`;
+    barra.className = 'roja';
+    conf.className = 'confirmaSalto visible';
+    conf.innerHTML = `<label class="opcSalto"><input type="checkbox" ${eleccionDe(horoId, v) === 'confirmado' ? 'checked' : ''}
+      onchange="eleccionSalto[${horoId}] = this.checked ? {e:'confirmado', v:${v}} : null"><span>Confirmo que la lectura de <b class="mono">${v.toFixed(1)} h</b> es correcta (lo revisé en el horómetro)</span></label>`;
+    obs.classList.add('visible');
+    if(lbl) lbl.textContent = 'Observación (opcional)';
+    return;
+  }
+  if(tipo === 'salto'){
+    // Varios días sin lectura y un salto grande: ¿inicio de siembra o hay que justificarlo?
+    caja.classList.add('mal');
+    caja.textContent = `⚠ Salto de ${delta.toFixed(1)} h${enDias}${noches != null ? ` (${txtNoches(noches)})` : ''}.`;
+    barra.className = 'roja';
+    conf.className = 'confirmaSalto visible';
+    const e = eleccionDe(horoId, v);
+    conf.innerHTML = `<div style="font-weight:700;margin-bottom:6px">¿Este salto corresponde al inicio de la siembra?</div>
+      <label class="opcSalto"><input type="radio" name="salto-${horoId}" ${e === 'siembra' ? 'checked' : ''} onchange="elegirSalto(${horoId}, 'siembra')"><span>🌱 Sí, es el inicio de la siembra</span></label>
+      <label class="opcSalto"><input type="radio" name="salto-${horoId}" ${e === 'no_siembra' ? 'checked' : ''} onchange="elegirSalto(${horoId}, 'no_siembra')"><span>No — justificar el salto</span></label>`;
+    if(sieWrap) sieWrap.style.display = 'none';   // la respuesta de arriba reemplaza la casilla
+    if(e === 'no_siembra'){
+      obs.classList.add('visible');
+      if(lbl) lbl.textContent = 'Justificación del salto (obligatoria)';
+    }
+    return;
+  }
+
   const nivel = nivelDelta(delta);
+  const extra = dias > 1 ? ` en ${dias} días${noches != null ? ` (${txtNoches(noches)})` : ''}` : '';
   if(nivel === 'rojo'){
     caja.classList.add('mal');
-    caja.textContent = `⚠ Solo ${delta.toFixed(1)} h de luz desde la última lectura (menos de ${UMBRAL_ROJO} h). Se generará ALERTA — escriba una observación.`;
+    caja.textContent = `⚠ Solo ${delta.toFixed(1)} h de luz desde la última lectura${extra} (menos de ${UMBRAL_ROJO} h). Se generará ALERTA — escriba una observación.`;
     barra.className = 'roja';
     obs.classList.add('visible');
   } else if(nivel === 'amarillo'){
     caja.classList.add('amarillo');
-    caja.textContent = `🟡 Δ ${delta.toFixed(1)} h de luz: por debajo de ${UMBRAL_VERDE} h pero sobre ${UMBRAL_ROJO} h. Se guarda en amarillo, sin observación obligatoria.`;
+    caja.textContent = `🟡 Δ ${delta.toFixed(1)} h de luz${extra}: por debajo de ${UMBRAL_VERDE} h pero sobre ${UMBRAL_ROJO} h. Se guarda en amarillo, sin observación obligatoria.`;
     barra.className = 'amarilla';
   } else {
     caja.classList.add('ok');
-    caja.textContent = `Δ ${delta.toFixed(1)} h de luz registradas. Correcto.`;
+    caja.textContent = `Δ ${delta.toFixed(1)} h de luz registradas${extra}. Correcto.`;
     barra.className = 'verde';
   }
+}
+
+function elegirSalto(horoId, e){
+  eleccionSalto[horoId] = { e, v: parseFloat($('val-'+horoId).value) };
+  previsualizarDelta(horoId);
+  if(e === 'no_siembra'){ const o = $('obs-'+horoId); if(o) o.focus(); }
+}
+
+/* Revisa la lectura antes de guardar (nueva o corregida). Devuelve null si se puede
+   guardar, o el mensaje de aviso. Si es inicio de siembra, lo marca en extra. */
+function validarSalto(horoId, v, observacion, extra){
+  const prev = prevPorHoro[horoId];
+  if(!prev) return null;
+  const fecha = $('regFecha').value || hoyISO();
+  const delta = deltaHoras(v, prev.valor), dias = diasEntre(prev.fecha, fecha);
+  const tipo = tipoSalto(delta, dias);
+  const e = eleccionDe(horoId, v);
+  if(tipo === 'alto' && e !== 'confirmado'){
+    previsualizarDelta(horoId);
+    return `⚠ ${delta.toFixed(1)} h en una sola noche supera el máximo de ${MAX_HORAS_NOCHE} h. Revise el horómetro y marque la confirmación si la lectura es correcta.`;
+  }
+  if(tipo === 'salto'){
+    if(e !== 'siembra' && e !== 'no_siembra'){
+      previsualizarDelta(horoId);
+      return `⚠ Salto de ${delta.toFixed(1)} h en ${dias} días: indique si corresponde al inicio de la siembra.`;
+    }
+    if(e === 'no_siembra' && !observacion){
+      previsualizarDelta(horoId);
+      return 'Escriba la justificación del salto antes de guardar.';
+    }
+    extra.inicio_siembra = e === 'siembra';
+  }
+  return null;
 }
 
 async function guardarLectura(horoId){
@@ -961,7 +1149,7 @@ async function guardarLectura(horoId){
 
   // Validación local (funciona también sin red)
   const ultimas = lsGet('cacheUltimas', {});
-  const prev = ultimas[horoId];
+  const prev = prevPorHoro[horoId];
   const obsEl = $('obs-'+horoId);
   const observacion = obsEl && obsEl.value.trim() ? obsEl.value.trim() : null;
 
@@ -982,7 +1170,13 @@ async function guardarLectura(horoId){
     return;
   }
 
+  // Más de 10 h en una noche o salto de varios días (¿inicio de siembra?)
+  const extra = {};
+  const msgSalto = validarSalto(horoId, v, observacion, extra);
+  if(msgSalto){ aviso(msgSalto, true); return; }
+
   const fila = { horometro_id: horoId, fecha, valor: v, observacion, usuario_id: perfil.id };
+  if(extra.inicio_siembra) fila.inicio_siembra = true;   // solo se envía si aplica (compatible sin v12)
   const btn = $('btnGuardar-'+horoId);
 
   if(hayRed()){
@@ -995,11 +1189,13 @@ async function guardarLectura(horoId){
       } else if(error.message.includes('observación') || error.message.includes('ALERTA')){
         $('obsWrap-'+horoId).classList.add('visible');
         aviso('⚠ Alerta: debe escribir una observación.', true);
+      } else if(/inicio_siembra|schema cache/i.test(error.message)){
+        aviso('La base de datos aún no tiene la opción "inicio de siembra" (falta ejecutar actualizacion_v12.sql). Avise al administrador.', true);
       } else aviso('Error: ' + error.message, true);
       await cargarHorometrosBloque();
       return;
     }
-    aviso('Lectura guardada ✔');
+    aviso(extra.inicio_siembra ? 'Lectura guardada ✔ · 🌱 marcada como inicio de siembra' : 'Lectura guardada ✔');
   } else {
     const cola = lsGet('colaLecturas', []);
     if(cola.some(c => c.horometro_id === horoId && c.fecha === fecha)){
@@ -1010,8 +1206,8 @@ async function guardarLectura(horoId){
   }
 
   // actualizar caché de última lectura y estado del día
-  ultimas[horoId] = { fecha, valor: v };
-  lsSet('cacheUltimas', ultimas);
+  delete eleccionSalto[horoId];
+  if(!ultimas[horoId] || fecha >= ultimas[horoId].fecha){ ultimas[horoId] = { fecha, valor: v }; lsSet('cacheUltimas', ultimas); }
   const h = lsGet('cacheHorometros', []).find(x => x.id === horoId);
   if(h) estadoDia.registrados.add(h.bloque_id);
   registrarPosicion('lectura');
@@ -1022,6 +1218,7 @@ async function guardarLectura(horoId){
 
 function activarEdicion(horoId){
   editandoLecturaId = horoId;
+  delete eleccionSalto[horoId];
   cargarHorometrosBloque();
 }
 
@@ -1041,9 +1238,19 @@ async function guardarEdicionLectura(lecturaId, horoId){
   const obsEl = $('obs-'+horoId);
   const observacion = obsEl && obsEl.value.trim() ? obsEl.value.trim() : null;
 
+  const extra = {};
+  const msgSalto = validarSalto(horoId, v, observacion, extra);
+  if(msgSalto){ aviso(msgSalto, true); return; }
+  const cambios = { valor: v, observacion };
+  // Inicio de siembra: la respuesta al salto manda; si no hubo salto, la casilla de la edición
+  const sie = $('sie-'+horoId), sieVisible = $('sieWrap-'+horoId) && $('sieWrap-'+horoId).style.display !== 'none';
+  if('inicio_siembra' in extra) cambios.inicio_siembra = extra.inicio_siembra;
+  else if(sie && sieVisible) cambios.inicio_siembra = sie.checked;
+  if(cambios.inicio_siembra === false && !(sie && sie.defaultChecked)) delete cambios.inicio_siembra;   // nada que cambiar (compatible sin v12)
+
   const btn = $('btnGuardarEdit-'+horoId);
   if(btn) btn.disabled = true;
-  const { error } = await db.from('lecturas').update({ valor: v, observacion }).eq('id', lecturaId);
+  const { error } = await db.from('lecturas').update(cambios).eq('id', lecturaId);
   if(btn) btn.disabled = false;
   if(error){
     if(error.message.includes('observación') || error.message.includes('ALERTA')){
@@ -1051,12 +1258,15 @@ async function guardarEdicionLectura(lecturaId, horoId){
       aviso(`⚠ Alerta de menos de ${UMBRAL_ROJO} h: debe escribir una observación antes de guardar.`, true);
     } else if(error.message.toLowerCase().includes('row-level security') || error.message.toLowerCase().includes('policy')){
       aviso('No tiene permiso para editar esta lectura.', true);
+    } else if(/inicio_siembra|schema cache/i.test(error.message)){
+      aviso('La base de datos aún no tiene la opción "inicio de siembra" (falta ejecutar actualizacion_v12.sql).', true);
     } else {
       aviso('Error: ' + error.message, true);
     }
     return;
   }
   aviso('Lectura corregida ✔');
+  delete eleccionSalto[horoId];
   editandoLecturaId = null;
   await cargarHorometrosBloque();
   await cargarEstadoDia();
@@ -1220,9 +1430,8 @@ function pintarPendientes(){
   $('kpiReg').textContent = nReg;
   $('kpiPend').textContent = pend.length;
   $('kpiJust').textContent = nJust;
-  const badge = $('numPend');
-  badge.style.display = pend.length ? 'flex' : 'none';
-  badge.textContent = pend.length;
+  nBloquesPend = pend.length;
+  actualizarBadgePend();
 
   if(!pend.length){
     $('listaPendientes').innerHTML = '<div class="vacio">🌼 Todos los bloques del día están registrados o justificados.</div>';
@@ -1315,6 +1524,154 @@ function revisarNotificacionPendientes(){
     new Notification('⚠ Horómetros pendientes', { body: cuerpo });
   }
   aviso('⚠ ' + cuerpo, true);
+}
+
+/* ------------------------- novedades del sistema eléctrico ------------------------- */
+/* El operario las reporta al medir la luz (de noche). Aparecen en Pendientes desde
+   las 6:00 a. m. siguientes: si se reportó antes de las 6 a. m., ese mismo día;
+   si fue después, al día siguiente. Quedan ahí hasta que alguien las marca intervenidas. */
+const HORA_VISIBLE_NOVEDADES = 6;
+let novedadesPend = [];          // pendientes traídas del servidor (o de la caché)
+let novedadesDisponibles = true; // false si la base aún no tiene la tabla (falta v12)
+let nBloquesPend = 0, nNovedadesVisibles = 0;
+
+const escHtml = t => String(t ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+const idCliente = () => (window.crypto && crypto.randomUUID) ? crypto.randomUUID() : Date.now().toString(36) + Math.random().toString(36).slice(2);
+const faltaV12 = msg => /novedades_electricas|schema cache|does not exist|relation/i.test(msg || '');
+
+function visibleDesde(reportadoEnISO){
+  const local = new Date(new Date(reportadoEnISO).getTime() - 5 * 3600000);   // Colombia: UTC−5 todo el año
+  let v = Date.UTC(local.getUTCFullYear(), local.getUTCMonth(), local.getUTCDate(), HORA_VISIBLE_NOVEDADES + 5);
+  if(local.getUTCHours() >= HORA_VISIBLE_NOVEDADES) v += 86400000;
+  return v;
+}
+
+function actualizarBadgePend(){
+  const n = nBloquesPend + nNovedadesVisibles;
+  const badge = $('numPend');
+  badge.style.display = n ? 'flex' : 'none';
+  badge.textContent = n;
+}
+
+function pintarNovBloque(){
+  const b = bloquePorId($('luzBloque').value);
+  $('novBloqueTxt').textContent = b ? `bloque ${b.codigo}` : 'bloque';
+}
+
+async function reportarNovedad(opc = {}){
+  if(perfil && perfil.rol === 'consulta'){ aviso('Usuario de solo consulta: no puede realizar registros.', true); return false; }
+  const texto = $('novTexto').value.trim();
+  if(!texto){ aviso('Describa la novedad eléctrica que vio (qué y dónde).', true); $('novTexto').focus(); return false; }
+  const bloqueId = Number($('luzBloque').value);
+  if(!bloqueId){ aviso('Seleccione el bloque.', true); return false; }
+  const fila = {
+    id_cliente: idCliente(), bloque_id: bloqueId, descripcion: texto,
+    reportado_por: perfil.id, reportado_en: new Date(opc.reportadoEn || Date.now()).toISOString()
+  };
+  const btn = $('btnNovedad');
+  if(hayRed()){
+    if(btn) btn.disabled = true;
+    const { error } = await db.from('novedades_electricas').insert(fila);
+    if(btn) btn.disabled = false;
+    if(error){
+      aviso(faltaV12(error.message)
+        ? 'La base de datos aún no tiene novedades eléctricas (falta ejecutar actualizacion_v12.sql). Avise al administrador.'
+        : 'No se pudo reportar la novedad: ' + error.message, true);
+      return false;
+    }
+  } else {
+    const cola = lsGet('colaNovedades', []); cola.push(fila); lsSet('colaNovedades', cola);
+  }
+  $('novTexto').value = '';
+  if(!opc.silencioso){
+    const b = bloquePorId(bloqueId);
+    aviso(hayRed() ? `⚡ Novedad del bloque ${b ? b.codigo : ''} reportada ✔ Aparece en Pendientes desde las 6:00 a. m.`
+                   : '⏳ Sin conexión: novedad guardada en el dispositivo. Se sube al recuperar señal.');
+  }
+  actualizarBanner();
+  pintarNovedades();
+  return true;
+}
+
+async function cargarNovedades(){
+  if(hayRed()){
+    const { data, error } = await db.from('novedades_electricas').select('*')
+      .eq('estado', 'pendiente').order('reportado_en');
+    if(error){
+      novedadesDisponibles = !faltaV12(error.message);
+      if(novedadesDisponibles) console.warn('Novedades eléctricas:', error.message);
+      novedadesPend = lsGet('cacheNovedades', []);
+    } else {
+      novedadesDisponibles = true;
+      novedadesPend = data || [];
+      lsSet('cacheNovedades', novedadesPend);
+    }
+  } else {
+    novedadesPend = lsGet('cacheNovedades', []);
+  }
+  pintarNovedades();
+}
+
+function pintarNovedades(){
+  const caja = $('novedadesPend');
+  if(!caja) return;
+  const cerradas = new Set(lsGet('colaCierres', []).map(c => c.id));
+  const enCola = lsGet('colaNovedades', []).map(n => ({ ...n, _enCola:true }));
+  const todas = [...novedadesPend.filter(n => !cerradas.has(n.id)), ...enCola];
+  const ahora = Date.now();
+  const visibles = todas.filter(n => visibleDesde(n.reportado_en) <= ahora);
+  const proximas = todas.filter(n => visibleDesde(n.reportado_en) > ahora);
+  nNovedadesVisibles = visibles.length;
+  actualizarBadgePend();
+  if(!novedadesDisponibles && !todas.length){ caja.innerHTML = ''; return; }
+
+  const fmtFH = iso => new Date(iso).toLocaleString('es-CO', { timeZone:'America/Bogota', weekday:'short', day:'numeric', month:'short', hour:'numeric', minute:'2-digit' });
+  const item = n => {
+    const b = bloquePorId(n.bloque_id);
+    // el nombre lo guarda la base (reportado_nombre); lo que está en cola es del propio usuario
+    const quien = n.reportado_nombre || (perfil && n.reportado_por === perfil.id ? perfil.nombre : '—');
+    const diasAbierta = Math.floor((ahora - visibleDesde(n.reportado_en)) / 86400000);
+    const antig = visibleDesde(n.reportado_en) > ahora ? 'desde mañana 6 a. m.'
+      : diasAbierta >= 1 ? `<b style="color:var(--rojo)">abierta hace ${diasAbierta} día${diasAbierta === 1 ? '' : 's'}</b>` : '<b>para hoy</b>';
+    return `
+    <div class="pendItem novItem">
+      <div class="pendCab">
+        <div>
+          <div class="pendBloque">⚡ Bloque ${b ? b.codigo : '?'}</div>
+          <div style="font-size:12px;color:var(--texto2)">Reportó ${escHtml(quien)} · ${fmtFH(n.reportado_en)}${n._enCola ? ' · ⏳ en el dispositivo' : ''}</div>
+        </div>
+        <div class="pendEta">${antig}</div>
+      </div>
+      <div class="novDesc">${escHtml(n.descripcion)}</div>
+      ${n._enCola ? '' : `<div style="display:flex;gap:8px"><button class="btnJust" onclick="cerrarNovedad(${n.id})">✔ Marcar intervenida</button></div>`}
+    </div>`;
+  };
+  caja.innerHTML = `
+    <h2>⚡ Novedades eléctricas por intervenir <span style="text-transform:none;letter-spacing:0">· ${visibles.length}</span></h2>
+    ${visibles.length ? visibles.map(item).join('') : '<div class="vacio" style="margin-bottom:10px">Sin novedades eléctricas para intervenir hoy.</div>'}
+    ${proximas.length ? `<details class="nochesMas" style="margin-bottom:14px"><summary>Reportadas para mañana · ${proximas.length} (aparecen desde las 6:00 a. m.)</summary>${proximas.map(item).join('')}</details>` : ''}`;
+}
+
+async function cerrarNovedad(id){
+  if(perfil && perfil.rol === 'consulta'){ aviso('Usuario de solo consulta: no puede realizar registros.', true); return; }
+  const n = novedadesPend.find(x => x.id === id);
+  const b = n ? bloquePorId(n.bloque_id) : null;
+  const nota = prompt(`Novedad del bloque ${b ? b.codigo : ''}:\n"${n ? n.descripcion : ''}"\n\n¿Qué se hizo para intervenirla? (ej. se cambió el breaker, se encintó el cable…)`);
+  if(nota === null) return;
+  if(!nota.trim()){ aviso('Escriba qué se hizo para intervenir la novedad.', true); return; }
+  const cambios = { estado:'intervenida', intervenida_por: perfil.id, intervenida_en: new Date().toISOString(), nota_intervencion: nota.trim() };
+  if(hayRed()){
+    const { error } = await db.from('novedades_electricas').update(cambios).eq('id', id).eq('estado', 'pendiente');
+    if(error){ aviso('Error: ' + error.message, true); return; }
+    aviso('✔ Novedad marcada como intervenida.');
+  } else {
+    const c = lsGet('colaCierres', []); c.push({ id, ...cambios }); lsSet('colaCierres', c);
+    aviso('⏳ Sin conexión: el cierre se subirá al recuperar señal.');
+  }
+  novedadesPend = novedadesPend.filter(x => x.id !== id);
+  lsSet('cacheNovedades', novedadesPend);
+  pintarNovedades();
+  actualizarBanner();
 }
 
 /* ------------------------- luz nocturna ------------------------- */
@@ -1561,6 +1918,12 @@ async function guardarLecturaLuz(){
     aviso('⏳ Sin conexión: lectura de luz guardada en el dispositivo.');
   }
 
+  // Novedad eléctrica escrita en la tarjeta de abajo: se reporta con la hora de la medición
+  if($('novTexto').value.trim()){
+    const okNov = await reportarNovedad({ silencioso:true, reportadoEn: fila.medido_en });
+    if(okNov) aviso(hayRed() ? 'Lectura de luz guardada ✔ · ⚡ novedad eléctrica reportada' : '⏳ Sin conexión: lectura de luz y novedad guardadas en el dispositivo.');
+  }
+
   // Limpiar solo mediciones y observación; conservar tipo/bloque/cama/lado para la siguiente cama
   ['luzInicio','luzMitad','luzFinal','luzGuirnaldas','luzBombillos'].forEach(id => $(id).value = '');
   $('obsLuz').value = '';
@@ -1583,6 +1946,7 @@ function cambiarModoDashboard(m){
   $('kpiOkLbl').textContent = m === 'horometros' ? '% en verde' : '% camas OK';
   $('kpiAlertLbl').textContent = m === 'horometros' ? 'Alertas (rojo)' : 'Bajo ref.';
   $('kpiAmarWrap').style.display = m === 'horometros' ? '' : 'none';
+  if(m !== 'horometros') $('panelNoches').style.display = 'none';
   // En luz no hay amarillo: se ocultan esas opciones y "rojas" pasa a "bajo referencia"
   const sel = $('alFiltro');
   [...sel.options].forEach(o => {
@@ -1696,6 +2060,7 @@ let consultaDashId = 0;
 async function cargarAlertas(){
   if(modoDashboard === 'luz'){ return cargarLuzDashboard(); }
   const miConsulta = ++consultaDashId;
+  cargarNochesHoro();   // encabezado: noches por horómetro (consulta independiente)
   if(!hayRed()){
     $('listaAlertas').innerHTML = '<div class="vacio">El historial de lecturas requiere conexión.</div>';
     return;
@@ -1719,9 +2084,11 @@ async function cargarAlertas(){
 
   const total = (data||[]).length;
   pintarAvisoTope(total, 'lecturas');
-  const nAlertas = (data||[]).filter(l => nivelDelta(l.delta)==='rojo' && l.delta != null).length;
-  const nAmarillos = (data||[]).filter(l => l.delta != null && nivelDelta(l.delta)==='amarillo').length;
-  const conDelta = (data||[]).filter(l => l.delta != null).length;
+  // Las lecturas de inicio de siembra no entran al semáforo (el salto no es una noche normal)
+  const evaluables = (data||[]).filter(l => l.delta != null && !l.inicio_siembra);
+  const nAlertas = evaluables.filter(l => nivelDelta(l.delta)==='rojo').length;
+  const nAmarillos = evaluables.filter(l => nivelDelta(l.delta)==='amarillo').length;
+  const conDelta = evaluables.length;
   $('kpiLect').textContent = total;
   $('kpiAlert').textContent = nAlertas;
   $('kpiAmar').textContent = nAmarillos;
@@ -1738,21 +2105,74 @@ async function cargarAlertas(){
 
   $('listaAlertas').innerHTML = data.map(a => {
     const nivel = a.delta != null ? nivelDelta(a.delta) : 'verde';
-    const esAlerta = nivel === 'rojo';
-    const color = {rojo:'var(--rojo)', amarillo:'var(--amarillo)', verde:'var(--verde)'}[nivel];
+    const esAlerta = nivel === 'rojo' && !a.inicio_siembra;
+    const dias = a.dias_desde_anterior != null ? Number(a.dias_desde_anterior) : null;
+    const tipo = a.delta != null ? tipoSalto(Number(a.delta), dias) : null;
+    let color = {rojo:'var(--rojo)', amarillo:'var(--amarillo)', verde:'var(--verde)'}[nivel];
+    if(a.inicio_siembra) color = 'var(--texto2)';
+    else if(tipo) color = 'var(--ambar)';
     const borde = color;
     const deltaTxt = a.delta != null ? Number(a.delta).toFixed(1) + ' h' : 'primera lectura';
+    const bl = bloquePorId(a.horometros?.bloque_id);
+    const noches = a.delta != null ? nochesDe(a.delta, bl && bl.es_banco) : null;
+    const extraDias = dias != null && dias > 1 ? ` · en ${dias} días${noches != null ? ` (${txtNoches(noches)})` : ''}` : '';
+    const marca = a.inicio_siembra ? '<span class="marcaLect siembra">🌱 Inicio de siembra</span>'
+      : tipo === 'alto' ? `<span class="marcaLect alto">Más de ${MAX_HORAS_NOCHE} h en una noche · confirmada</span>`
+      : tipo === 'salto' ? `<span class="marcaLect alto">${a.observacion ? 'Salto justificado' : `Salto tras ${dias} días sin lectura`}</span>` : '';
     return `
     <div class="alertaItem" style="border-left-color:${borde}">
       <div class="alertaCab">
         <span>Bloque <b>${a.horometros?.bloques?.codigo ?? '?'}</b> · ${a.horometros?.nombre ?? ''} (naves ${a.horometros?.nave_desde}–${a.horometros?.nave_hasta})</span>
         <span class="mono">${a.fecha}</span>
       </div>
-      <div class="alertaDelta mono" style="color:${color}">${deltaTxt}${esAlerta ? ' ⚠' : (nivel==='amarillo' ? ' 🟡' : '')}</div>
+      <div class="alertaDelta mono" style="color:${color}">${deltaTxt}${esAlerta ? ' ⚠' : (nivel==='amarillo' && !a.inicio_siembra ? ' 🟡' : '')}<span class="deltaDias">${extraDias}</span></div>
+      ${marca}
       <div style="font-size:12px;color:var(--texto2)">Lectura: <span class="mono">${Number(a.valor).toFixed(1)} h</span> · Registró: ${a.perfiles?.nombre ?? '—'}</div>
       ${a.observacion ? `<div class="alertaObs">📝 ${a.observacion}</div>` : ''}
     </div>`;
   }).join('');
+}
+
+/* Noches de luz por horómetro (encabezado de Lecturas). Se cuentan desde el último
+   inicio de siembra marcado (incluye las horas del salto) o, si no hay, desde la
+   primera lectura. 1 noche ≈ HORAS_POR_NOCHE h; en bancos solo se muestran horas. */
+let consultaNochesId = 0;
+async function cargarNochesHoro(){
+  const caja = $('panelNoches');
+  const mia = ++consultaNochesId;
+  if(modoDashboard !== 'horometros' || !hayRed()){ caja.style.display = 'none'; return; }
+  const bloqueId = Number($('alBloque').value) || null, horoId = Number($('alHorometro').value) || null;
+  const hs = lsGet('cacheHorometros', []).filter(h => (!bloqueId || h.bloque_id === bloqueId) && (!horoId || h.id === horoId));
+  if(!hs.length){ caja.style.display = 'none'; return; }
+  let q = db.from('v_noches_horometro').select('*');
+  if(bloqueId || horoId) q = q.in('horometro_id', hs.map(h => h.id));
+  const { data, error } = await q;
+  if(mia !== consultaNochesId) return;
+  if(error){ caja.style.display = 'none'; console.warn('Noches por horómetro no disponibles (¿falta actualizacion_v12.sql?):', error.message); return; }
+  const porHoro = {};
+  (data || []).forEach(r => { porHoro[r.horometro_id] = r; });
+  const filas = hs.map(h => ({ h, b: bloquePorId(h.bloque_id), r: porHoro[h.id] }))
+    .filter(x => x.b)
+    .sort((x, y) => String(x.b.codigo).localeCompare(String(y.b.codigo), 'es', { numeric:true }) || x.h.nave_desde - y.h.nave_desde);
+  const fmt = f => f ? new Date(f + 'T12:00:00').toLocaleDateString('es-CO', { day:'numeric', month:'short' }) : '';
+  const tile = ({ h, b, r }) => {
+    if(!r) return `<div class="nocheTile vacioT"><div class="nocheCab">Bl. ${b.codigo} · ${h.nombre}</div><div class="nocheNum">—</div><div class="nochePie">sin lecturas</div></div>`;
+    const n = nochesDe(r.horas, b.es_banco);
+    const desde = r.desde_siembra ? `🌱 siembra reg. ${fmt(r.desde_fecha)}` : `desde 1ª lectura ${fmt(r.desde_fecha)}`;
+    return `<div class="nocheTile${r.desde_siembra ? ' siembraT' : ''}" title="${Number(r.horas).toFixed(1)} h acumuladas · última lectura ${r.ultima_fecha}">
+      <div class="nocheCab">Bl. ${b.codigo} · ${h.nombre}</div>
+      <div class="nocheNum mono">${n != null ? n : Number(r.horas).toFixed(1) + ' h'}</div>
+      <div class="nochePie">${n != null ? `noche${n === 1 ? '' : 's'} · ${Number(r.horas).toFixed(1)} h` : 'banco (solo horas)'}<br>${desde}</div>
+    </div>`;
+  };
+  const VISIBLES = 12;
+  const primeras = filas.slice(0, VISIBLES), resto = filas.slice(VISIBLES);
+  caja.style.display = 'block';
+  caja.innerHTML = `
+    <h2 style="margin:0 0 2px">🌙 Noches de luz por horómetro</h2>
+    <div class="horaHint" style="margin:0 0 10px">1 noche ≈ ${HORAS_POR_NOCHE} h de horómetro (bancos: solo horas). Se cuentan desde el inicio de siembra 🌱 o, si no está marcado, desde la primera lectura.</div>
+    <div class="nochesGrid">${primeras.map(tile).join('')}</div>
+    ${resto.length ? `<details class="nochesMas"><summary>Ver los ${resto.length} horómetros restantes</summary><div class="nochesGrid">${resto.map(tile).join('')}</div></details>` : ''}`;
 }
 
 /* ------------------------- gestión de horómetros ------------------------- */
@@ -2041,7 +2461,7 @@ function guardarArchivoCSV(enc, filas, nombre){
 
 function descargarCSVHoro(datos, desde, hasta){
   // Naves en dos columnas numéricas: "1-5" en una sola celda Excel lo convierte en fecha (01-may)
-  const enc = ['Fecha','Bloque','Horometro','Nave desde','Nave hasta','Lectura (h)','Delta (h)','Nivel','Observacion','Registro'];
+  const enc = ['Fecha','Bloque','Horometro','Nave desde','Nave hasta','Lectura (h)','Delta (h)','Dias desde anterior','Noches aprox.','Nivel','Observacion','Registro'];
   const esc = v => '"' + String(v ?? '').replace(/"/g, '""') + '"';
   const filas = datos.map(l => [
     l.fecha,
@@ -2051,7 +2471,9 @@ function descargarCSVHoro(datos, desde, hasta){
     l.horometros?.nave_hasta ?? '',
     String(Number(l.valor).toFixed(1)).replace('.', ','),
     l.delta != null ? String(Number(l.delta).toFixed(1)).replace('.', ',') : '',
-    l.delta == null ? '' : ({rojo:'ROJO',amarillo:'AMARILLO',verde:'VERDE'}[nivelDelta(l.delta)]),
+    l.dias_desde_anterior ?? '',
+    l.delta != null ? (nochesDe(l.delta, (bloquePorId(l.horometros?.bloque_id) || {}).es_banco) ?? '') : '',
+    l.delta == null ? '' : (l.inicio_siembra ? 'INICIO SIEMBRA' : {rojo:'ROJO',amarillo:'AMARILLO',verde:'VERDE'}[nivelDelta(l.delta)]),
     l.observacion ?? '',
     l.perfiles?.nombre ?? ''
   ].map(esc).join(';'));
@@ -2172,7 +2594,8 @@ function irA(sec, btn){
   document.querySelectorAll('nav button').forEach(b => b.classList.remove('activo'));
   $('sec-'+sec).classList.add('activa');
   btn.classList.add('activo');
-  if(sec === 'pendientes') cargarEstadoDia();
+  if(sec === 'pendientes'){ cargarEstadoDia(); cargarNovedades(); }
+  if(sec === 'registro') pintarNovBloque();
   if(sec === 'alertas') cargarAlertas();
 }
 
