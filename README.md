@@ -8,7 +8,7 @@ sincroniza sola al recuperar conexión.
 
 - App publicada: https://jaalvarezs.github.io/LUCES/
 - Base de datos: Supabase (proyecto `horometros_fotoperiodo`)
-- Versión actual: **v2026.11.19-1** (se ve en la pantalla de inicio de sesión)
+- Versión actual: **v2026.11.19-2** (se ve en la pantalla de inicio de sesión)
 
 ---
 
@@ -19,7 +19,7 @@ sincroniza sola al recuperar conexión.
 | Registro de horómetros | Lectura diaria por horómetro, de 6:00 a.m. a 2:00 p.m. (supervisor/administrador sin límite de horario). A la 1:00 p.m. avisa los bloques sin registrar. |
 | Semáforo de horas | Compara con la lectura anterior (ciclo normal: 9 p.m.–3 a.m., 10/20 min = 2.0 h por noche). Ver tabla abajo. |
 | Lecturas altas y saltos | Más de 10 h entre dos días seguidos pide confirmar la lectura. Tras varios días sin lectura, un salto de más de 10 h pregunta si es el **inicio de la siembra**; si no, exige justificarlo. |
-| Noches de luz | En **Lecturas**, panel con las noches de luz de cada horómetro (1 noche ≈ 2 h) desde el inicio de siembra. Los **bancos** se muestran solo en horas. |
+| Noches de luz | En **Lecturas**, panel con las noches de luz de cada horómetro desde el inicio de siembra: 1 noche = 2 h en la finca y 6 h en los **bancos de enraizamiento** (bloques 39 y 40). |
 | Novedades eléctricas | Al medir la luz, el operario puede reportar lo que vea en el sistema eléctrico del bloque. Aparece en **Pendientes** desde las 6:00 a.m. siguientes hasta que alguien la marca como intervenida. |
 | Luz nocturna | Tipo de cama (Producción/Propagación), bloque, cama, lado A/B, fecha y hora, 5 mediciones (inicio, mitad, final, entre 2 guirnaldas, entre 4 bombillos). Hora automática. Bajo la referencia exige observación. Ver protocolo abajo. |
 | Sin internet | Lecturas, luz, justificaciones y GPS quedan en el equipo y suben solos. Si algo no sube, aparece en un panel rojo en **Pendientes**. |
@@ -36,6 +36,11 @@ sincroniza sola al recuperar conexión.
 | 🟡 Amarillo | 1.5 h hasta menos de 2.0 h | No (solo queda marcado) |
 | 🔴 Rojo | menos de 1.5 h | **Sí** (cuenta como alerta) |
 
+**Bancos de enraizamiento (bloques 39 y 40):** luces continuas de 9 p.m. a 3 a.m., 1 noche = 6 h.
+La lectura es correcta entre **5 y 7 h por noche** (6 h ± 1 h). Si hubo días sin lectura, las horas
+se reparten entre los días (12 h en 2 días = 6 h por noche). Por fuera del rango sale en 🔴 rojo y
+exige observación. En los bancos no hay amarillo.
+
 La regla se valida en la app **y** en la base de datos. En la base de datos la
 columna `alerta` = rojo; el amarillo se calcula a partir de `delta`.
 
@@ -51,8 +56,10 @@ columna `alerta` = rojo; el amarillo se calcula a partir de `delta`.
   las horas del salto (se asume que las luces arrancaron con la siembra). Si no hay ninguna marcada,
   se cuentan desde la primera lectura.
 - Una lectura de hoy se puede corregir con ✎ Editar, incluida la marca de siembra.
-- **Bancos:** se marcan en la pestaña Bloques (columna "Banco"). Sus horómetros se muestran en horas,
-  no en noches. Los bloques cuyo código dice "banco" quedaron marcados solos.
+- **Bancos:** los bloques 39 y 40 quedaron marcados como bancos. Para marcar o quitar otro, pestaña
+  Bloques → columna "Banco" (supervisor/administrador); sus lecturas anteriores se vuelven a clasificar solas.
+- En los bancos, el salto que pregunta por la siembra es de más de 30 h tras varios días (las mismas
+  5 noches que 10 h en el resto de la finca). Más de 10 h en una sola noche pide confirmar, igual que en la finca.
 
 ### Novedades del sistema eléctrico
 
@@ -119,6 +126,7 @@ el momento real en que llegó el registro (`created_at`).
 | `actualizacion_v10.sql` | Semáforo verde/amarillo/rojo | Supabase |
 | `actualizacion_v11.sql` | Luz nocturna: 5 puntos y referencia por tipo de cama | Supabase |
 | `actualizacion_v12.sql` | Inicio de siembra, días entre lecturas, bancos, noches por horómetro, novedades eléctricas | Supabase |
+| `actualizacion_v13.sql` | Bancos 39 y 40: 1 noche = 6 h, rango 5–7 h por noche; columna `nivel` del semáforo | Supabase |
 | `README.md` | Este documento | — |
 
 > No existe `actualizacion_v9.sql`: era el informe semanal por correo, que se descartó.
@@ -128,7 +136,7 @@ el momento real en que llegó el registro (`created_at`).
 ## Instalación desde cero (solo si hubiera que montar todo de nuevo)
 
 1. **Supabase → SQL Editor**, ejecutar en orden: `horometros_schema.sql`, `actualizacion_v2.sql`
-   hasta `actualizacion_v8.sql`, `actualizacion_v10.sql`, `actualizacion_v11.sql` y `actualizacion_v12.sql`.
+   hasta `actualizacion_v8.sql`, `actualizacion_v10.sql`, `actualizacion_v11.sql`, `actualizacion_v12.sql` y `actualizacion_v13.sql`.
 2. **Supabase → Authentication → Users**: crear cada usuario como `usuario@trigal.local`
    con **Auto Confirm User** ✅. En la app se ingresa solo con `usuario` y clave.
 3. Asignar roles:
@@ -154,7 +162,8 @@ el momento real en que llegó el registro (`created_at`).
 | `UMBRAL_VERDE` | 2 | Desde este valor la noche es verde |
 | `UMBRAL_ROJO` | 1.5 | Por debajo es rojo (alerta + observación). Si se cambia, cambiar también `umbral_alerta_horas()` en Supabase |
 | `HORAS_ESPERADAS` | 2 | Noche completa (barra al 100 %) |
-| `HORAS_POR_NOCHE` | 2 | Horas de horómetro que equivalen a una noche de luz (no aplica a bancos) |
+| `HORAS_POR_NOCHE` | 2 | Horas de horómetro que equivalen a una noche de luz en la finca |
+| `HORAS_NOCHE_BANCO` / `TOLERANCIA_BANCO` | 6 / 1 | Bancos: 1 noche = 6 h; correcto entre 5 y 7 h por noche. Si se cambian, cambiar también `horas_noche()` y `tolerancia_banco()` en Supabase |
 | `MAX_HORAS_NOCHE` | 10 | Más de esto pide confirmar la lectura (días seguidos) o preguntar por la siembra (tras varios días) |
 | `HORA_VISIBLE_NOVEDADES` | 6 | Hora desde la que una novedad eléctrica aparece en Pendientes |
 | `LIMITE_PANTALLA` | 500 | Lecturas que se muestran en el dashboard |
@@ -166,6 +175,10 @@ el momento real en que llegó el registro (`created_at`).
 | `VEL_CAMINATA_KMH` / `MIN_POR_BLOQUE` | 4 / 3 | Estimación del tiempo de recorrido |
 
 ## Historial
+
+- **v2026.11.19-2** — Bancos de enraizamiento (bloques 39 y 40): 1 noche = 6 h y lectura correcta entre
+  5 y 7 h por noche; fuera del rango, alerta con observación. La base de datos guarda el nivel del
+  semáforo de cada lectura (columna `nivel`), que usan los filtros de Lecturas.
 
 - **v2026.11.19** — Lectura de más de 10 h en una noche: confirmación del operario. Salto tras varios
   días sin lectura: pregunta si es inicio de siembra o pide justificarlo. Panel de noches de luz por

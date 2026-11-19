@@ -386,7 +386,7 @@
     <h2>Bloques del cultivo</h2>
     <div class="tarjeta" style="padding:6px 12px">
       <table>
-        <thead><tr><th>Bloque</th><th>Naves</th><th>Medias</th><th title="Los bancos no se cuentan a 2 h por noche">Banco</th><th>GPS</th></tr></thead>
+        <thead><tr><th>Bloque</th><th>Naves</th><th>Medias</th><th title="Bancos de enraizamiento: 1 noche = 6 h (rango 5–7 h)">Banco</th><th>GPS</th></tr></thead>
         <tbody id="tablaBloques"></tbody>
       </table>
     </div>
@@ -420,31 +420,63 @@ function diasEntre(desdeISO, hastaISO){
   const [a, b, c] = desdeISO.split('-').map(Number), [x, y, z] = hastaISO.split('-').map(Number);
   return Math.round((Date.UTC(x, y - 1, z) - Date.UTC(a, b - 1, c)) / 86400000);
 }
-/* Noches de luz equivalentes a unas horas de horómetro (null en bancos) */
+/* Horas de horómetro que equivalen a una noche: 6 en bancos, 2 en el resto */
+function horasNoche(esBanco){ return esBanco ? HORAS_NOCHE_BANCO : HORAS_POR_NOCHE; }
+function esBancoHoro(horoId){
+  const h = lsGet('cacheTodosHorometros', null)?.find(x => x.id === Number(horoId)) || lsGet('cacheHorometros', []).find(x => x.id === Number(horoId));
+  const b = h ? bloquePorId(h.bloque_id) : null;
+  return !!(b && b.es_banco);
+}
+/* Noches de luz equivalentes a unas horas de horómetro */
 function nochesDe(horas, esBanco){
-  if(esBanco || horas == null || isNaN(horas)) return null;
-  return Math.round(Number(horas) / HORAS_POR_NOCHE);
+  if(horas == null || isNaN(horas)) return null;
+  return Math.round(Number(horas) / horasNoche(esBanco));
 }
 function txtNoches(n){ return n == null ? '' : `≈ ${n} noche${n === 1 ? '' : 's'}`; }
 /* Clasifica una lectura nueva frente a la anterior:
    'alto'  : más de MAX_HORAS_NOCHE en días seguidos (pedir confirmación)
    'salto' : más de MAX_HORAS_NOCHE tras varios días sin lectura (¿inicio de siembra?) */
-function tipoSalto(delta, dias){
-  if(delta == null || dias == null || delta <= MAX_HORAS_NOCHE) return null;
-  return dias <= 1 ? 'alto' : 'salto';
+function tipoSalto(delta, dias, esBanco){
+  if(delta == null || dias == null) return null;
+  if(dias <= 1) return delta > MAX_HORAS_NOCHE ? 'alto' : null;
+  // tras varios días: el mismo número de noches (10 h = 5 noches normales; 30 h en bancos)
+  return delta > umbralSalto(esBanco) ? 'salto' : null;
 }
+function umbralSalto(esBanco){ return MAX_HORAS_NOCHE * horasNoche(esBanco) / HORAS_POR_NOCHE; }
 function deltaHoras(v, prev){ return (Math.round(Number(v)*10) - Math.round(Number(prev)*10)) / 10; }
-function nivelDelta(d){
+/* Semáforo. Debe coincidir con nivel_lectura() en Supabase (actualizacion_v13.sql).
+   Resto de la finca: verde ≥ 2 h · amarillo 1.5–2 h · rojo < 1.5 h.
+   Bancos: 6 ± 1 h POR NOCHE (si hubo días sin lectura se reparte entre ellos):
+           entre 5 y 7 h = verde; por fuera del rango = rojo. */
+function rangoBanco(){ return { min: HORAS_NOCHE_BANCO - TOLERANCIA_BANCO, max: HORAS_NOCHE_BANCO + TOLERANCIA_BANCO }; }
+function porNoche(d, dias){ return Math.round(Number(d) / Math.max(1, Number(dias) || 1) * 10) / 10; }
+function nivelDelta(d, esBanco, dias){
   if(d == null || d === '' || isNaN(d)) return 'verde';
   d = Math.round(Number(d)*10)/10;
+  if(esBanco){
+    const pn = porNoche(d, dias), r = rangoBanco();
+    return (pn < r.min || pn > r.max) ? 'rojo' : 'verde';
+  }
   if(d < UMBRAL_ROJO) return 'rojo';
   if(d < UMBRAL_VERDE) return 'amarillo';
   return 'verde';
 }
+function txtRojo(esBanco){
+  const r = rangoBanco();
+  return esBanco ? `fuera del rango del banco, ${r.min}–${r.max} h por noche` : `menos de ${UMBRAL_ROJO} h`;
+}
+/* Nivel de una lectura guardada: el que calculó la base (v13) o, si no está, el de la app */
+function nivelLectura(l){
+  if(l.inicio_siembra) return 'siembra';
+  if(l.nivel) return l.nivel;
+  return nivelDelta(l.delta, esBancoHoro(l.horometro_id), l.dias_desde_anterior);
+}
 const LIMITE_PANTALLA = 500;   // lecturas que se muestran en el dashboard (las más recientes)
 const MESES_CSV = 6;           // el CSV trae todo el rango filtrado; sin fecha "Desde", los últimos 6 meses
 const HORAS_ESPERADAS = 2;     // delta esperado por noche (barra al 100%)
-const HORAS_POR_NOCHE = 2;     // una noche de luces ≈ 2 h en el horómetro (no aplica a bancos)
+const HORAS_POR_NOCHE = 2;     // una noche de luces ≈ 2 h en el horómetro (luces cicladas, resto de la finca)
+const HORAS_NOCHE_BANCO = 6;   // bancos de enraizamiento (39 y 40): luces continuas 9 p.m.–3 a.m. = 6 h por noche
+const TOLERANCIA_BANCO = 1;    // bancos: lectura correcta entre 5 y 7 h por noche (6 ± 1). Igual a tolerancia_banco() en Supabase
 const MAX_HORAS_NOCHE = 10;    // entre dos días seguidos, más de 10 h pide confirmar la lectura;
                                // tras varios días sin lectura, más de 10 h es un "salto" (¿inicio de siembra?)
 const VEL_CAMINATA_KMH = 4;    // velocidad para estimar tiempo de recorrido
@@ -464,7 +496,7 @@ const LUZ_FACTOR_ALTO = 3;        // atípico si supera 3 veces la mediana de lo
 const LUZ_FACTOR_BAJO = 4;        // atípico si es menor que la mediana de los otros puntos / 4
 // Súbela cada vez que entregues una versión nueva — así se puede confirmar
 // a simple vista, desde la app, cuál versión quedó instalada en cada celular.
-const VERSION_APP = 'v2026.11.19-1';   // > 10 h por noche, saltos / inicio de siembra, noches por horómetro, bancos, novedades eléctricas
+const VERSION_APP = 'v2026.11.19-2';   // bancos de enraizamiento (39 y 40): 1 noche = 6 h, rango 5–7 h por noche
 
 const db = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
 
@@ -813,8 +845,9 @@ async function marcarBanco(bloqueId){
   if(!hayRed()){ aviso('Se requiere conexión para editar bloques.', true); return; }
   const b = bloquePorId(bloqueId);
   const nuevo = !b.es_banco;
-  if(!confirm(nuevo ? `¿Marcar el bloque ${b.codigo} como BANCO? Sus horómetros se mostrarán solo en horas (no en noches).`
-                    : `¿Quitar la marca de banco al bloque ${b.codigo}? Sus horómetros se contarán a ${HORAS_POR_NOCHE} h por noche.`)) return;
+  const r = rangoBanco();
+  if(!confirm(nuevo ? `¿Marcar el bloque ${b.codigo} como BANCO de enraizamiento?\n\n1 noche = ${HORAS_NOCHE_BANCO} h. Lectura correcta entre ${r.min} y ${r.max} h por noche; por fuera, alerta con observación. Sus lecturas anteriores se vuelven a clasificar.`
+                    : `¿Quitar la marca de banco al bloque ${b.codigo}?\n\n1 noche = ${HORAS_POR_NOCHE} h. Semáforo: verde desde ${UMBRAL_VERDE} h, rojo por debajo de ${UMBRAL_ROJO} h. Sus lecturas anteriores se vuelven a clasificar.`)) return;
   const { error } = await db.from('bloques').update({ es_banco: nuevo }).eq('id', bloqueId);
   if(error){ aviso('Error: ' + error.message, true); return; }
   aviso(`Bloque ${b.codigo}: ${nuevo ? 'marcado como banco' : 'ya no es banco'} ✔`);
@@ -972,13 +1005,14 @@ async function cargarHorometrosBloque(){
 
     if(reg && editandoLecturaId !== h.id){
       const puedeEditar = hayRed() && ((reg.usuario_id === perfil.id && fecha === hoyISO()) || esSupervisorOAdmin());
-      const pct = reg.delta == null ? 100 : Math.min(100, (Number(reg.delta)/HORAS_ESPERADAS)*100);
+      const pct = reg.delta == null ? 100 : Math.min(100, (Number(reg.delta)/horasNoche(esBanco))*100);
       const nReg = reg.delta != null && !reg.inicio_siembra ? nochesDe(reg.delta, esBanco) : null;
+      const nivReg = reg.nivel || nivelDelta(reg.delta, esBanco, reg.dias_desde_anterior);
       return `<div class="horoItem">${cab}
         <div class="yaRegistrada">✔ Registrado: <b class="mono">${Number(reg.valor).toFixed(1)} h</b>
-        ${reg.delta != null ? ` · Δ <b class="mono">${Number(reg.delta).toFixed(1)} h</b>` : ''}${reg.inicio_siembra ? ' · 🌱 Inicio de siembra' : (nivelDelta(reg.delta)==='rojo' ? ' · ⚠ ALERTA' : (nivelDelta(reg.delta)==='amarillo' ? ' · 🟡 Atención' : ''))}${nReg != null && nReg > 1 ? ` · ${txtNoches(nReg)}` : ''}
+        ${reg.delta != null ? ` · Δ <b class="mono">${Number(reg.delta).toFixed(1)} h</b>` : ''}${reg.inicio_siembra ? ' · 🌱 Inicio de siembra' : (nivReg==='rojo' ? ' · ⚠ ALERTA' : (nivReg==='amarillo' ? ' · 🟡 Atención' : ''))}${nReg != null && nReg > 1 ? ` · ${txtNoches(nReg)}` : ''}
         ${puedeEditar ? ` <button class="miniBtn" style="margin-left:6px" onclick="activarEdicion(${h.id})">✎ Editar</button>` : ''}</div>
-        <div class="barraLuz"><i class="${{rojo:'roja',amarillo:'amarilla',verde:'verde'}[nivelDelta(reg.delta)]}" style="width:${pct}%"></i></div>
+        <div class="barraLuz"><i class="${{rojo:'roja',amarillo:'amarilla',verde:'verde'}[nivReg]}" style="width:${pct}%"></i></div>
         ${reg.observacion ? `<div class="alertaObs">${reg.observacion}</div>` : ''}</div>`;
     }
     if(reg && editandoLecturaId === h.id){
@@ -1045,11 +1079,11 @@ function previsualizarDelta(horoId){
   const delta = deltaHoras(v, prev.valor);
   const dias = diasEntre(prev.fecha, fecha);
   if(delta < 0){ caja.classList.add('mal'); caja.textContent = 'La lectura es menor a la anterior. Verifique el valor.'; return; }
-  barra.style.width = Math.min(100, (delta/HORAS_ESPERADAS)*100) + '%';
-
   const b = bloquePorId($('regBloque').value);
-  const noches = nochesDe(delta, b && b.es_banco);
-  const tipo = tipoSalto(delta, dias);
+  const banco = !!(b && b.es_banco);
+  barra.style.width = Math.min(100, (porNoche(delta, dias)/horasNoche(banco))*100) + '%';
+  const noches = nochesDe(delta, banco);
+  const tipo = tipoSalto(delta, dias, banco);
   const enDias = dias > 1 ? ` en ${dias} días sin lectura` : '';
 
   if(tipo === 'alto'){
@@ -1061,7 +1095,7 @@ function previsualizarDelta(horoId){
     conf.innerHTML = `<label class="opcSalto"><input type="checkbox" ${eleccionDe(horoId, v) === 'confirmado' ? 'checked' : ''}
       onchange="eleccionSalto[${horoId}] = this.checked ? {e:'confirmado', v:${v}} : null"><span>Confirmo que la lectura de <b class="mono">${v.toFixed(1)} h</b> es correcta (lo revisé en el horómetro)</span></label>`;
     obs.classList.add('visible');
-    if(lbl) lbl.textContent = 'Observación (opcional)';
+    if(lbl) lbl.textContent = banco ? `Observación (obligatoria: ${txtRojo(true)})` : 'Observación (opcional)';
     return;
   }
   if(tipo === 'salto'){
@@ -1082,8 +1116,25 @@ function previsualizarDelta(horoId){
     return;
   }
 
-  const nivel = nivelDelta(delta);
+  const nivel = nivelDelta(delta, banco, dias);
   const extra = dias > 1 ? ` en ${dias} días${noches != null ? ` (${txtNoches(noches)})` : ''}` : '';
+  if(banco){
+    // Bancos: 6 ± 1 h por noche
+    const pn = porNoche(delta, dias), r = rangoBanco();
+    const det = dias > 1 ? ` (${delta.toFixed(1)} h en ${dias} días)` : '';
+    if(nivel === 'rojo'){
+      caja.classList.add('mal');
+      caja.textContent = `⚠ ${pn.toFixed(1)} h de luz por noche${det}: ${pn < r.min ? 'por debajo' : 'por encima'} del rango del banco (${r.min}–${r.max} h). Se generará ALERTA — escriba una observación.`;
+      barra.className = 'roja';
+      obs.classList.add('visible');
+      if(lbl && tipo !== 'alto') lbl.textContent = 'Observación (obligatoria: fuera del rango del banco)';
+    } else {
+      caja.classList.add('ok');
+      caja.textContent = `${pn.toFixed(1)} h de luz por noche${det}: dentro del rango del banco (${r.min}–${r.max} h). Correcto.`;
+      barra.className = 'verde';
+    }
+    return;
+  }
   if(nivel === 'rojo'){
     caja.classList.add('mal');
     caja.textContent = `⚠ Solo ${delta.toFixed(1)} h de luz desde la última lectura${extra} (menos de ${UMBRAL_ROJO} h). Se generará ALERTA — escriba una observación.`;
@@ -1113,7 +1164,8 @@ function validarSalto(horoId, v, observacion, extra){
   if(!prev) return null;
   const fecha = $('regFecha').value || hoyISO();
   const delta = deltaHoras(v, prev.valor), dias = diasEntre(prev.fecha, fecha);
-  const tipo = tipoSalto(delta, dias);
+  const bS = bloquePorId($('regBloque').value);
+  const tipo = tipoSalto(delta, dias, !!(bS && bS.es_banco));
   const e = eleccionDe(horoId, v);
   if(tipo === 'alto' && e !== 'confirmado'){
     previsualizarDelta(horoId);
@@ -1156,9 +1208,12 @@ async function guardarLectura(horoId){
   if(prev){
     if(v < prev.valor){ aviso(`La lectura (${v}) es menor a la anterior (${prev.valor}). El horómetro es acumulativo.`, true); return; }
     const delta = deltaHoras(v, prev.valor);
-    if(nivelDelta(delta) === 'rojo' && !observacion){
+    const bG = bloquePorId($('regBloque').value), bancoG = !!(bG && bG.es_banco);
+    const diasG = diasEntre(prev.fecha, fecha);
+    // el salto (¿inicio de siembra?) se resuelve aparte, en validarSalto
+    if(tipoSalto(delta, diasG, bancoG) !== 'salto' && nivelDelta(delta, bancoG, diasG) === 'rojo' && !observacion){
       $('obsWrap-'+horoId).classList.add('visible');
-      aviso(`⚠ Alerta de menos de ${UMBRAL_ROJO} h: debe escribir una observación antes de guardar.`, true);
+      aviso(`⚠ Alerta (${txtRojo(bancoG)}): debe escribir una observación antes de guardar.`, true);
       return;
     }
   } else if(!hayRed() && !observacion){
@@ -1255,7 +1310,7 @@ async function guardarEdicionLectura(lecturaId, horoId){
   if(error){
     if(error.message.includes('observación') || error.message.includes('ALERTA')){
       $('obsWrap-'+horoId).classList.add('visible');
-      aviso(`⚠ Alerta de menos de ${UMBRAL_ROJO} h: debe escribir una observación antes de guardar.`, true);
+      aviso(`⚠ Alerta (${txtRojo(esBancoHoro(horoId))}): debe escribir una observación antes de guardar.`, true);
     } else if(error.message.toLowerCase().includes('row-level security') || error.message.toLowerCase().includes('policy')){
       aviso('No tiene permiso para editar esta lectura.', true);
     } else if(/inicio_siembra|schema cache/i.test(error.message)){
@@ -2010,8 +2065,8 @@ function consultaHoro(f, desde){
   if(desde)  q = q.gte('fecha', desde);
   if(f.hasta) q = q.lte('fecha', f.hasta);
   if(f.filtro === 'alertas')   q = q.eq('alerta', true);                          // rojo (< 1.5 h)
-  if(f.filtro === 'amarillos') q = q.gte('delta', UMBRAL_ROJO).lt('delta', UMBRAL_VERDE);
-  if(f.filtro === 'novedades') q = q.lt('delta', UMBRAL_VERDE);                  // rojo + amarillo
+  if(f.filtro === 'amarillos') q = q.eq('nivel', 'amarillo');                    // umbral según bloque (v13)
+  if(f.filtro === 'novedades') q = q.in('nivel', ['rojo', 'amarillo']);          // rojo + amarillo
   if(f.horoId) q = q.eq('horometro_id', Number(f.horoId));
   else if(f.ids) q = f.ids.length ? q.in('horometro_id', f.ids) : q.eq('horometro_id', -1);  // sin horómetros → sin resultados
   return q;
@@ -2086,8 +2141,8 @@ async function cargarAlertas(){
   pintarAvisoTope(total, 'lecturas');
   // Las lecturas de inicio de siembra no entran al semáforo (el salto no es una noche normal)
   const evaluables = (data||[]).filter(l => l.delta != null && !l.inicio_siembra);
-  const nAlertas = evaluables.filter(l => nivelDelta(l.delta)==='rojo').length;
-  const nAmarillos = evaluables.filter(l => nivelDelta(l.delta)==='amarillo').length;
+  const nAlertas = evaluables.filter(l => nivelLectura(l)==='rojo').length;
+  const nAmarillos = evaluables.filter(l => nivelLectura(l)==='amarillo').length;
   const conDelta = evaluables.length;
   $('kpiLect').textContent = total;
   $('kpiAlert').textContent = nAlertas;
@@ -2104,18 +2159,19 @@ async function cargarAlertas(){
   }
 
   $('listaAlertas').innerHTML = data.map(a => {
-    const nivel = a.delta != null ? nivelDelta(a.delta) : 'verde';
-    const esAlerta = nivel === 'rojo' && !a.inicio_siembra;
+    const bl = bloquePorId(a.horometros?.bloque_id);
+    const banco = !!(bl && bl.es_banco);
     const dias = a.dias_desde_anterior != null ? Number(a.dias_desde_anterior) : null;
-    const tipo = a.delta != null ? tipoSalto(Number(a.delta), dias) : null;
-    let color = {rojo:'var(--rojo)', amarillo:'var(--amarillo)', verde:'var(--verde)'}[nivel];
+    const nivel = a.delta != null ? (a.inicio_siembra ? 'siembra' : (a.nivel || nivelDelta(a.delta, banco, dias))) : 'verde';
+    const esAlerta = nivel === 'rojo';
+    const tipo = a.delta != null ? tipoSalto(Number(a.delta), dias, banco) : null;
+    let color = {rojo:'var(--rojo)', amarillo:'var(--amarillo)', verde:'var(--verde)', siembra:'var(--texto2)'}[nivel];
     if(a.inicio_siembra) color = 'var(--texto2)';
     else if(tipo) color = 'var(--ambar)';
     const borde = color;
     const deltaTxt = a.delta != null ? Number(a.delta).toFixed(1) + ' h' : 'primera lectura';
-    const bl = bloquePorId(a.horometros?.bloque_id);
-    const noches = a.delta != null ? nochesDe(a.delta, bl && bl.es_banco) : null;
-    const extraDias = dias != null && dias > 1 ? ` · en ${dias} días${noches != null ? ` (${txtNoches(noches)})` : ''}` : '';
+    const noches = a.delta != null ? nochesDe(a.delta, banco) : null;
+    const extraDias = dias != null && dias > 1 ? ` · en ${dias} días${noches != null ? ` (${txtNoches(noches)})` : ''}${banco ? ` · ${porNoche(a.delta, dias).toFixed(1)} h/noche` : ''}` : '';
     const marca = a.inicio_siembra ? '<span class="marcaLect siembra">🌱 Inicio de siembra</span>'
       : tipo === 'alto' ? `<span class="marcaLect alto">Más de ${MAX_HORAS_NOCHE} h en una noche · confirmada</span>`
       : tipo === 'salto' ? `<span class="marcaLect alto">${a.observacion ? 'Salto justificado' : `Salto tras ${dias} días sin lectura`}</span>` : '';
@@ -2125,7 +2181,7 @@ async function cargarAlertas(){
         <span>Bloque <b>${a.horometros?.bloques?.codigo ?? '?'}</b> · ${a.horometros?.nombre ?? ''} (naves ${a.horometros?.nave_desde}–${a.horometros?.nave_hasta})</span>
         <span class="mono">${a.fecha}</span>
       </div>
-      <div class="alertaDelta mono" style="color:${color}">${deltaTxt}${esAlerta ? ' ⚠' : (nivel==='amarillo' && !a.inicio_siembra ? ' 🟡' : '')}<span class="deltaDias">${extraDias}</span></div>
+      <div class="alertaDelta mono" style="color:${color}">${deltaTxt}${esAlerta ? ' ⚠' : (nivel==='amarillo' ? ' 🟡' : '')}<span class="deltaDias">${extraDias}</span></div>
       ${marca}
       <div style="font-size:12px;color:var(--texto2)">Lectura: <span class="mono">${Number(a.valor).toFixed(1)} h</span> · Registró: ${a.perfiles?.nombre ?? '—'}</div>
       ${a.observacion ? `<div class="alertaObs">📝 ${a.observacion}</div>` : ''}
@@ -2158,11 +2214,12 @@ async function cargarNochesHoro(){
   const tile = ({ h, b, r }) => {
     if(!r) return `<div class="nocheTile vacioT"><div class="nocheCab">Bl. ${b.codigo} · ${h.nombre}</div><div class="nocheNum">—</div><div class="nochePie">sin lecturas</div></div>`;
     const n = nochesDe(r.horas, b.es_banco);
+    const tipoN = b.es_banco ? ` · banco ${HORAS_NOCHE_BANCO} h/noche` : '';
     const desde = r.desde_siembra ? `🌱 siembra reg. ${fmt(r.desde_fecha)}` : `desde 1ª lectura ${fmt(r.desde_fecha)}`;
     return `<div class="nocheTile${r.desde_siembra ? ' siembraT' : ''}" title="${Number(r.horas).toFixed(1)} h acumuladas · última lectura ${r.ultima_fecha}">
       <div class="nocheCab">Bl. ${b.codigo} · ${h.nombre}</div>
-      <div class="nocheNum mono">${n != null ? n : Number(r.horas).toFixed(1) + ' h'}</div>
-      <div class="nochePie">${n != null ? `noche${n === 1 ? '' : 's'} · ${Number(r.horas).toFixed(1)} h` : 'banco (solo horas)'}<br>${desde}</div>
+      <div class="nocheNum mono">${n}</div>
+      <div class="nochePie">noche${n === 1 ? '' : 's'} · ${Number(r.horas).toFixed(1)} h${tipoN}<br>${desde}</div>
     </div>`;
   };
   const VISIBLES = 12;
@@ -2170,7 +2227,7 @@ async function cargarNochesHoro(){
   caja.style.display = 'block';
   caja.innerHTML = `
     <h2 style="margin:0 0 2px">🌙 Noches de luz por horómetro</h2>
-    <div class="horaHint" style="margin:0 0 10px">1 noche ≈ ${HORAS_POR_NOCHE} h de horómetro (bancos: solo horas). Se cuentan desde el inicio de siembra 🌱 o, si no está marcado, desde la primera lectura.</div>
+    <div class="horaHint" style="margin:0 0 10px">1 noche ≈ ${HORAS_POR_NOCHE} h de horómetro (bancos de enraizamiento: ${HORAS_NOCHE_BANCO} h). Se cuentan desde el inicio de siembra 🌱 o, si no está marcado, desde la primera lectura.</div>
     <div class="nochesGrid">${primeras.map(tile).join('')}</div>
     ${resto.length ? `<details class="nochesMas"><summary>Ver los ${resto.length} horómetros restantes</summary><div class="nochesGrid">${resto.map(tile).join('')}</div></details>` : ''}`;
 }
@@ -2473,7 +2530,7 @@ function descargarCSVHoro(datos, desde, hasta){
     l.delta != null ? String(Number(l.delta).toFixed(1)).replace('.', ',') : '',
     l.dias_desde_anterior ?? '',
     l.delta != null ? (nochesDe(l.delta, (bloquePorId(l.horometros?.bloque_id) || {}).es_banco) ?? '') : '',
-    l.delta == null ? '' : (l.inicio_siembra ? 'INICIO SIEMBRA' : {rojo:'ROJO',amarillo:'AMARILLO',verde:'VERDE'}[nivelDelta(l.delta)]),
+    l.delta == null ? '' : {rojo:'ROJO',amarillo:'AMARILLO',verde:'VERDE',siembra:'INICIO SIEMBRA'}[nivelLectura(l)],
     l.observacion ?? '',
     l.perfiles?.nombre ?? ''
   ].map(esc).join(';'));
